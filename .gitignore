@@ -37,3 +37,6 @@ build/
 .idea/
 test-photos/
 test-results/
+
+### results of local runs (profile dev) ###
+data/

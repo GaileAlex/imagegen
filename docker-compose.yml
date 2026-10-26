@@ -1,5 +1,22 @@
 services:
 
+  spring-app:
+    container_name: cv-imagegen-app
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8390:8390"
+    volumes:
+      # Job records, inputs and results (10 days)
+      - results:/data
+      # The input and output folders of ComfyUI: the photos and results are deleted there once fetched
+      - comfy-io:/comfy-io
+    environment:
+      TZ: Europe/Tallinn
+      COMFYUI_URL: ${COMFYUI_URL:-http://cv-comfyui:8188}
+    networks:
+      - kokoro-net
+
   comfyui:
     container_name: cv-comfyui
     build: ./comfyui-service
@@ -8,6 +25,8 @@ services:
       - "127.0.0.1:8188:8188"
     volumes:
       - models:/models
+      # Uploaded photos and results, deleted by cv-imagegen-app once it has them
+      - comfy-io:/io
       # CUDA compiles its kernels for the GPU on the first run; keep them across container re-creation
       - cuda-cache:/home/comfy/.nv
     environment:
@@ -28,6 +47,10 @@ services:
       - kokoro-net
 
 volumes:
+  results:
+    name: imagegen-results
+  comfy-io:
+    name: imagegen-comfy-io
   models:
     # Created by hand and filled from StabilityMatrix\Models; never "docker compose down -v"
     name: imagegen-models

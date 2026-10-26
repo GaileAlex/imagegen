@@ -38,6 +38,8 @@ imagegen:
   comfyui-url: ${COMFYUI_URL:http://cv-comfyui:8188}
   # The volume imagegen-results
   data-dir: /data
+  # The volume imagegen-comfy-io: input/ and output/ of ComfyUI (see ComfyFiles); empty = not shared
+  comfyui-io-dir: /comfy-io
   idle-unload: 30m
   # The page sends a heartbeat every 60 s
   presence-timeout: 150s
@@ -45,3 +47,83 @@ imagegen:
   job-timeout: 15m
   max-jobs-per-user: 3
   max-queue: 10
+  # The modes of docs/CONTRACT.md. Defaults of the params come from workflows/<id>.params.json unless stated here;
+  # the other params of that file (filenamePrefix, sampler, halfWidth ...) are set by the service
+  models:
+    - id: muse-txt2img
+      kind: IMAGE
+      title: Muse (Krea 2)
+      description: Text to image. Muse is a Krea 2 fine-tune, the best all-rounder; 8-20 steps, CFG 1-2.5 (above 3 the image breaks).
+      typical-seconds: 50
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: negativePrompt, type: TEXT, default: '' }
+        - { name: steps, type: INT, min: 8, max: 40 }
+        - { name: cfg, type: FLOAT, min: 1.0, max: 4.0, step: 0.1 }
+        - { name: width, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: height, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: seed, type: SEED }
+    - id: fluxedup-txt2img
+      kind: IMAGE
+      title: fluxedUp (Flux.1 Dev)
+      description: Text to image in the photo style. Slow with the author's sampler (35 steps), may undress people unasked.
+      typical-seconds: 160
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: steps, type: INT, min: 20, max: 50 }
+        - { name: guidance, type: FLOAT, min: 2.0, max: 6.0, step: 0.1 }
+        - { name: width, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: height, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: seed, type: SEED }
+    - id: muse-edit
+      kind: EDIT
+      title: Muse edit by instruction
+      description: Edits an uploaded photo by a plain instruction ("add a ginger cat on the bed", "remove the pillow"). The whole picture is re-rendered, very close to the photo.
+      typical-seconds: 60
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: steps, type: INT, min: 8, max: 40 }
+        - { name: cfg, type: FLOAT, min: 1.0, max: 4.0, step: 0.1 }
+        - { name: seed, type: SEED }
+    - id: muse-inpaint
+      kind: INPAINT
+      title: Muse inpaint
+      description: Redraws only the masked area of an uploaded photo; the pixels outside the mask stay as they were.
+      typical-seconds: 60
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: steps, type: INT, min: 8, max: 40 }
+        - { name: cfg, type: FLOAT, min: 1.0, max: 4.0, step: 0.1 }
+        - { name: seed, type: SEED }
+    - id: fluxedup-inpaint
+      kind: INPAINT
+      title: fluxedUp inpaint
+      description: Redraws the masked area in the photo style. The most photo-real result, but hit or miss per seed.
+      typical-seconds: 150
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: steps, type: INT, min: 20, max: 50 }
+        - { name: guidance, type: FLOAT, min: 2.0, max: 6.0, step: 0.1 }
+        - { name: seed, type: SEED }
+    - id: wan22-i2v-fastmove
+      kind: VIDEO
+      title: Wan 2.2 Fast Move
+      description: Video from a start image, lively motion, no sound. 832x480 (16 fps).
+      typical-seconds: 160
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: negativePrompt, type: TEXT }
+        - { name: seconds, type: INT, default: '5', min: 2, max: 6 }
+        - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
+        - { name: seed, type: SEED }
+    - id: ltx25-i2v
+      kind: VIDEO
+      title: LTX 2.5
+      description: Video with sound from a start image. 1216x704 (24 fps).
+      typical-seconds: 115
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: negativePrompt, type: TEXT }
+        - { name: seconds, type: INT, default: '5', min: 2, max: 8 }
+        - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
+        - { name: seed, type: SEED }

@@ -1,0 +1,5 @@
+imagegen:
+  comfyui-url: http://localhost:8188
+  data-dir: ./data
+  # ComfyUI runs in Docker, its folders are not reachable from a local run
+  comfyui-io-dir: ""

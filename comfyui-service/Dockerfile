@@ -49,7 +49,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 # outputs and inputs are temporary, the Spring app fetches the results over the API
 # (ubuntu:24.04 has its own user "ubuntu" with uid 1000)
 RUN userdel --remove ubuntu && useradd --create-home --uid 1000 comfy && \
-    install -d -o comfy -g comfy /models /app/output /app/input /app/temp /app/user /home/comfy/.nv && \
+    install -d -o comfy -g comfy /models /io /io/input /io/output /app/temp /app/user /home/comfy/.nv && \
     chown -R comfy:comfy /app
 COPY --chown=comfy:comfy extra_model_paths.yaml /app/extra_model_paths.yaml
 USER comfy
@@ -58,4 +58,7 @@ WORKDIR /app
 EXPOSE 8188
 
 # --disable-auto-launch: no browser; models stay in VRAM until the Spring app asks /free (the idle unload is its job)
-CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188", "--disable-auto-launch"]
+# /io = the volume imagegen-comfy-io, shared with cv-imagegen-app: it deletes the uploaded photos and the results
+# once it has them (ComfyUI keeps them forever otherwise)
+CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188", "--disable-auto-launch", \
+     "--input-directory", "/io/input", "--output-directory", "/io/output"]

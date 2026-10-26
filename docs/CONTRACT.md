@@ -65,10 +65,10 @@ Param types: `TEXT`, `INT`, `FLOAT`, `ENUM` (with `options`), `SEED` (empty = ra
 catalogue are accepted from the client; the rest of `<id>.params.json` (`filenamePrefix`, LTX `halfWidth`, mask blur
 ...) is set by the service. Derived values:
 - EDIT / INPAINT: `width`/`height` are not client params; they come from the photo: scaled to at most ~1.05 MP
-  (1184x888 for 4:3), both sides rounded down to a multiple of 16.
+  (1168x880 for 4:3, 1024x1024 for a square), both sides rounded down to a multiple of 16.
 - VIDEO size is an `orientation` ENUM (`landscape` / `portrait`): Wan 832x480 / 480x832, LTX 1216x704 / 704x1216
   (the service sets the LTX stage-1 `halfWidth`/`halfHeight`).
-- VIDEO length is a client param in seconds (`seconds`, 2-8), converted to frames: 16 * s + 1 for Wan (16 fps),
+- VIDEO length is a client param in seconds (`seconds`: Wan 2-6, LTX 2-8), converted to frames: 16 * s + 1 for Wan (16 fps),
   24 * s + 1 for LTX (24 fps); both satisfy the frame rules of the models (4n+1, 8n+1).
 
 ## Jobs
@@ -90,7 +90,8 @@ Answer `202`:
 {"jobId": "3f0c...", "status": "QUEUED", "position": 1, "seed": 123456789}
 ```
 
-`position` = jobs ahead of this one including the running one (0 = it runs now).
+`position` = jobs ahead of this one including the running one (0 = it runs now). `status` may already be
+RUNNING when the queue was empty.
 
 Errors (body `{"error": "<code>", "message": "..."}`):
 - `400 invalid_params` - unknown model, a param out of range, missing image/mask, unreadable image
@@ -131,7 +132,7 @@ History of the user, newest first: the same objects as `GET /api/jobs/{id}`. At 
 
 ### `GET /api/jobs/{id}/result`
 
-The file (`image/png` or `video/mp4`), `Content-Disposition: attachment; filename="<model>-<yyyyMMdd-HHmmss>-<seed>.<ext>"`
+The file (`image/png` or `video/mp4`), `Content-Disposition: attachment; filename="<model>-<yyyyMMdd-HHmmss>-<seed>.<ext>"` (time in UTC)
 with `?download=true`, `inline` otherwise. Supports `Range` (video seeking). 404 unless DONE.
 
 ### `GET /api/jobs/{id}/input`
@@ -187,6 +188,12 @@ Route leave (`ngOnDestroy`) and `pagehide` (`navigator.sendBeacon`, so cv-app ta
   "presentUsers": 1
 }
 ```
+
+## ComfyUI folders
+
+ComfyUI keeps every uploaded photo and every result in its input/ and output/ folders and has no API to delete them.
+They are the volume `imagegen-comfy-io` (/io in cv-comfyui, /comfy-io in cv-imagegen-app, both uid 1000): the
+service deletes the inputs after the prompt and the output once downloaded (`ComfyFiles`).
 
 ## Storage
 
