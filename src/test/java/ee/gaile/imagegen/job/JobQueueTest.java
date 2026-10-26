@@ -80,6 +80,38 @@ public class JobQueueTest {
     }
 
     @Test
+    void usersTakeTurnsAndTheJobsOfOneUserKeepTheirOrder() throws InterruptedException {
+        Job a1 = job(1, "a1");
+        Job a2 = job(1, "a2");
+        Job a3 = job(1, "a3");
+        Job b1 = job(2, "b1");
+        Job b2 = job(2, "b2");
+        Job c1 = job(3, "c1");
+        queue.submit(a1);
+        Job running = gateway.awaitRunning();
+        queue.submit(a2);
+        queue.submit(a3);
+        queue.submit(b1);
+        queue.submit(b2);
+        queue.submit(c1);
+
+        // users 2 and 3 were never served, user 1 just was
+        assertThat(queue.position(b1)).isEqualTo(1);
+        assertThat(queue.position(c1)).isEqualTo(2);
+        assertThat(queue.position(a2)).isEqualTo(3);
+        assertThat(queue.position(b2)).isEqualTo(4);
+        assertThat(queue.position(a3)).isEqualTo(5);
+
+        for (int i = 0; i < 5; i++) {
+            gateway.complete(running);
+            running = gateway.awaitRunning();
+        }
+        gateway.complete(running);
+        await().until(() -> a3.getStatus() == JobStatus.DONE);
+        assertThat(gateway.started).containsExactly("a1", "b1", "c1", "a2", "b2", "a3");
+    }
+
+    @Test
     void limitsJobsPerUserAndInTotal() throws InterruptedException {
         queue.submit(job(1, "a"));
         gateway.awaitRunning();

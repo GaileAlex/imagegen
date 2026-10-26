@@ -45,8 +45,9 @@ imagegen:
   presence-timeout: 150s
   retention: 10d
   job-timeout: 15m
-  max-jobs-per-user: 3
-  max-queue: 10
+  # The users take turns (JobQueue), so a long row of one user does not hold the others up
+  max-jobs-per-user: 20
+  max-queue: 50
   # Russian prompts go to the models in English. The CPU instance of Ollama of the CV project: the GPU belongs to
   # ComfyUI; the model leaves memory with the unload of the GPU model
   translator:

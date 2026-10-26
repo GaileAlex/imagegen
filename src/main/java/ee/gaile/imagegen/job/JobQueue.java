@@ -11,15 +11,21 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * One job at a time on the GPU, in the order of submission. A single worker thread takes the next job and runs it
- * through ComfyUI; the unload of the model happens under the same lock, so it never cuts a job off.
+ * One job at a time on the GPU. The users take turns: the next job is the oldest one of the user served longest ago
+ * (a user never served comes first), so a long row of jobs of one user does not hold the others up; the jobs of one
+ * user keep their order (a picture runs before the video waiting for it). A single worker thread takes the next job
+ * and runs it through ComfyUI; the unload of the model happens under the same lock, so it never cuts a job off.
  */
 @Slf4j
 @Component
@@ -37,6 +43,9 @@ public class JobQueue {
     private final Condition jobQueued = lock.newCondition();
     private final Deque<Job> queued = new ArrayDeque<>();
     private Job running;
+    /** The turn number of the last job taken of each user; the turns count up with every job taken */
+    private final Map<Long, Long> lastTurns = new HashMap<>();
+    private long turn;
     /** A job ran since the last unload, so ComfyUI holds a model */
     private boolean loaded;
     private String lastModel;
@@ -87,14 +96,8 @@ public class JobQueue {
             if (job == running) {
                 return 0;
             }
-            int index = 0;
-            for (Job other : queued) {
-                if (other == job) {
-                    return index + (running != null ? 1 : 0);
-                }
-                index++;
-            }
-            return -1;
+            int index = plannedOrder().indexOf(job);
+            return index < 0 ? -1 : index + (running != null ? 1 : 0);
         } finally {
             lock.unlock();
         }
@@ -177,6 +180,35 @@ public class JobQueue {
         return count;
     }
 
+    /**
+     * The queued jobs in the order the worker will take them, if nothing is added or cancelled meanwhile. Users with
+     * the same last turn (never served) go in the order of their first queued job.
+     */
+    private List<Job> plannedOrder() {
+        Map<Long, Deque<Job>> byUser = new LinkedHashMap<>();
+        for (Job job : queued) {
+            byUser.computeIfAbsent(job.getUserId(), id -> new ArrayDeque<>()).addLast(job);
+        }
+        Map<Long, Long> turns = new HashMap<>(lastTurns);
+        long next = turn;
+        List<Job> order = new ArrayList<>(queued.size());
+        while (!byUser.isEmpty()) {
+            Long user = null;
+            for (Long candidate : byUser.keySet()) {
+                if (user == null || turns.getOrDefault(candidate, -1L) < turns.getOrDefault(user, -1L)) {
+                    user = candidate;
+                }
+            }
+            Deque<Job> jobs = byUser.get(user);
+            order.add(jobs.pollFirst());
+            if (jobs.isEmpty()) {
+                byUser.remove(user);
+            }
+            turns.put(user, ++next);
+        }
+        return order;
+    }
+
     private void work() {
         while (!Thread.currentThread().isInterrupted()) {
             Job job;
@@ -185,7 +217,9 @@ public class JobQueue {
                 while (queued.isEmpty()) {
                     jobQueued.await();
                 }
-                job = queued.pollFirst();
+                job = plannedOrder().getFirst();
+                queued.remove(job);
+                lastTurns.put(job.getUserId(), ++turn);
                 running = job;
                 loaded = true;
                 lastModel = job.getModel();

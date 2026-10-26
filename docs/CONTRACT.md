@@ -102,11 +102,12 @@ Answer `202`:
 ```
 
 `position` = jobs ahead of this one including the running one (0 = it runs now). `status` may already be
-RUNNING when the queue was empty.
+RUNNING when the queue was empty. The users take turns: the next job is the oldest one of the user served longest
+ago, the jobs of one user keep their order. So `position` may grow when another user adds a job.
 
 Errors (body `{"error": "<code>", "message": "..."}`):
 - `400 invalid_params` - unknown model, a param out of range, missing image/mask, unreadable image
-- `429 too_many_jobs` - the user has 3 jobs QUEUED or RUNNING, or the whole queue has 10
+- `429 too_many_jobs` - the user has 20 jobs QUEUED or RUNNING, or the whole queue has 50
 - `503 comfyui_unavailable` - ComfyUI does not answer `/system_stats`
 
 ### `GET /api/jobs/{id}`
