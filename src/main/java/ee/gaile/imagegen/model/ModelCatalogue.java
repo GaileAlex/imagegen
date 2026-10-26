@@ -103,11 +103,19 @@ public class ModelCatalogue {
             return switch (param.type()) {
                 case INT -> Integer.valueOf(text);
                 case FLOAT -> Double.valueOf(text);
+                case BOOL -> bool(modelId, param, text);
                 default -> text;
             };
         } catch (NumberFormatException e) {
             throw new IllegalStateException(modelId + ": default of " + param.name() + " is not a number: " + text);
         }
+    }
+
+    private Boolean bool(String modelId, ParamConfig param, String text) {
+        if (!"true".equals(text) && !"false".equals(text)) {
+            throw new IllegalStateException(modelId + ": default of " + param.name() + " is not true or false: " + text);
+        }
+        return Boolean.valueOf(text);
     }
 
     /** INT params show whole numbers (8, not 8.0) */

@@ -131,6 +131,7 @@ public class ComfyUiGateway implements ComfyGateway {
     /**
      * The workflow of the template with the values put into every input the params file lists for them.
      * Values without an entry in the file are ignored; inputs without a value keep what the template has.
+     * A video with keepFace is rewired by {@link FaceAnchors} when its workflow can anchor the face.
      */
     ObjectNode buildWorkflow(WorkflowTemplate template, Map<String, Object> values) {
         ObjectNode graph = template.newGraph();
@@ -147,6 +148,11 @@ public class ComfyUiGateway implements ComfyGateway {
                 }
                 inputs.set(target.substring(dot + 1), mapper.valueToTree(value.getValue()));
             }
+        }
+        // a video from the text alone has no face to keep
+        if (template.faceAnchor() != null && Boolean.TRUE.equals(values.get(WorkflowValues.KEEP_FACE))
+                && !Boolean.TRUE.equals(values.get(JobFactory.TEXT_ONLY))) {
+            FaceAnchors.apply(graph, template.faceAnchor(), ((Number) values.get("frames")).intValue());
         }
         return graph;
     }

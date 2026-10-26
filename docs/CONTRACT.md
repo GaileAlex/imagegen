@@ -66,7 +66,7 @@ Response:
 }]
 ```
 
-Param types: `TEXT`, `INT`, `FLOAT`, `ENUM` (with `options`), `SEED` (empty = random). Only params listed in the
+Param types: `TEXT`, `INT`, `FLOAT`, `ENUM` (with `options`), `SEED` (empty = random), `BOOL` (true / false). Only params listed in the
 catalogue are accepted from the client; the rest of `<id>.params.json` (`filenamePrefix`, LTX `halfWidth`, mask blur
 ...) is set by the service. Derived values:
 - EDIT / INPAINT: `width`/`height` are not client params; they come from the photo: scaled to at most ~1.05 MP
@@ -79,6 +79,12 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
   `needsImage: false, acceptsImage: true`: without an image the video is made from the text alone, the service adds
   `"textOnly": true` to the params of the job (shown in the job JSON, not accepted from the client) and the workflow
   skips its start image.
+- VIDEO `keepFace` (BOOL, default true) keeps the face of the start image: the image is given to the model again later
+  in the clip, so the face does not drift away (`keepFace` of `<id>.params.json` names how, see `FaceAnchor`). Wan:
+  the start image is also the last frame (WanFirstLastFrameToVideo). LTX: the start image is a guide frame about every
+  2.7 s and on the last frame, on both stages (LTXVAddGuide, then LTXVCropGuides); 8 s took 308 s instead of 182 s.
+  The person comes back to the pose of the picture there and the motion gets calmer, so it is a bad fit for a scene
+  where someone leaves the frame. Ignored for a video from the text alone.
 
 ## Jobs
 

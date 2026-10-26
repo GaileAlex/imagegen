@@ -145,6 +145,65 @@ class ComfyUiGatewayTest {
     }
 
     @Test
+    void wanKeepsTheFaceWithTheStartImageAsTheLastFrame() {
+        var template = new WorkflowRepository(MAPPER).get("wan22-i2v");
+        Job kept = job("wan22-i2v", params("prompt", "walks"), null);
+        Job free = job("wan22-i2v", params("prompt", "walks", "keepFace", false), null);
+
+        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(kept));
+        ObjectNode plain = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(free));
+
+        assertThat(graph.at("/12/class_type").asString()).isEqualTo("WanFirstLastFrameToVideo");
+        assertThat(graph.at("/12/inputs/end_image").toString()).isEqualTo("[\"11\",0]");
+        assertThat(graph.at("/12/inputs/start_image").toString()).isEqualTo("[\"11\",0]");
+        assertThat(plain.at("/12/class_type").asString()).isEqualTo("WanImageToVideo");
+        assertThat(plain.at("/12/inputs/end_image").isMissingNode()).isTrue();
+    }
+
+    @Test
+    void ltxKeepsTheFaceWithGuideFramesOnBothStages() {
+        var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
+        Job job = job("ltx25-nsfw-i2v", params("prompt", "walks", "seconds", 8), null);
+
+        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
+
+        // stage 1: 100-102 guide the half size latent at frames 64, 128 and the last, 103 crops them off
+        assertThat(graph.at("/100/inputs/latent").toString()).isEqualTo("[\"12\",0]");
+        assertThat(graph.at("/100/inputs/positive").toString()).isEqualTo("[\"10\",0]");
+        assertThat(graph.at("/100/inputs/frame_idx").asInt()).isEqualTo(64);
+        assertThat(graph.at("/101/inputs/frame_idx").asInt()).isEqualTo(128);
+        assertThat(graph.at("/102/inputs/frame_idx").asInt()).isEqualTo(-1);
+        assertThat(graph.at("/14/inputs/video_latent").toString()).isEqualTo("[\"102\",2]");
+        assertThat(graph.at("/15/inputs/positive").toString()).isEqualTo("[\"102\",0]");
+        assertThat(graph.at("/103/class_type").asString()).isEqualTo("LTXVCropGuides");
+        assertThat(graph.at("/103/inputs/latent").toString()).isEqualTo("[\"20\",0]");
+        assertThat(graph.at("/21/inputs/samples").toString()).isEqualTo("[\"103\",2]");
+        // stage 2: 104-106 guide the full size latent, 107 is its own guider, 108 crops before decoding
+        assertThat(graph.at("/104/inputs/positive").toString()).isEqualTo("[\"103\",0]");
+        assertThat(graph.at("/104/inputs/latent").toString()).isEqualTo("[\"22\",0]");
+        assertThat(graph.at("/23/inputs/video_latent").toString()).isEqualTo("[\"106\",2]");
+        assertThat(graph.at("/107/class_type").asString()).isEqualTo("LTXVDualCFGGuider");
+        assertThat(graph.at("/107/inputs/positive").toString()).isEqualTo("[\"106\",0]");
+        assertThat(graph.at("/26/inputs/guider").toString()).isEqualTo("[\"107\",0]");
+        assertThat(graph.at("/108/inputs/latent").toString()).isEqualTo("[\"27\",0]");
+        assertThat(graph.at("/28/inputs/samples").toString()).isEqualTo("[\"108\",2]");
+        assertThat(graph.has("109")).isFalse();
+    }
+
+    @Test
+    void ltxFromTheTextAloneHasNoFaceToKeep() {
+        var template = new WorkflowRepository(MAPPER).get("ltx25-i2v");
+        Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-i2v"),
+                params("prompt", "walks"), null, false);
+
+        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
+
+        assertThat(job.getParams()).containsEntry("keepFace", true);
+        assertThat(graph.has("100")).isFalse();
+        assertThat(graph.at("/28/inputs/samples").toString()).isEqualTo("[\"27\",0]");
+    }
+
+    @Test
     void ltxWithoutAStartImageSkipsTheImageNodesAndUploadsAPlaceholder() {
         Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-i2v"),
                 params("prompt", "walks", "seconds", 2), null, false);

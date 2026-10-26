@@ -15,8 +15,10 @@ import java.util.Set;
 @UtilityClass
 public class WorkflowValues {
 
-    /** Client params the workflow has no input for: they only decide other values */
-    public static final Set<String> CLIENT_ONLY_PARAMS = Set.of("seconds", "orientation");
+    /** Client param of a video: the start image is given to the model again later in the clip, see FaceAnchor */
+    public static final String KEEP_FACE = "keepFace";
+    /** Client params the workflow has no input for: they only decide other values or the shape of the graph */
+    public static final Set<String> CLIENT_ONLY_PARAMS = Set.of("seconds", "orientation", KEEP_FACE);
 
     /**
      * @param fps        frames per second of the model

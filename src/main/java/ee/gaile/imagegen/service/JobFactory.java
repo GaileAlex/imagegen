@@ -98,6 +98,7 @@ public class JobFactory {
                 case FLOAT -> decimal(param, value);
                 case ENUM -> option(param, value);
                 case SEED -> seed(value);
+                case BOOL -> bool(param, value);
             });
         }
         return params;
@@ -166,6 +167,16 @@ public class JobFactory {
             throw new InvalidParamsException("seed must be a whole number from 0 to " + MAX_SEED + " or empty");
         }
         return number.longValue();
+    }
+
+    private Object bool(ParamDefinition param, Object value) {
+        if (value == null) {
+            return param.defaultValue();
+        }
+        if (!(value instanceof Boolean)) {
+            throw new InvalidParamsException(param.name() + " must be true or false");
+        }
+        return value;
     }
 
     private double number(ParamDefinition param, Object value) {

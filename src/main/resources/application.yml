@@ -122,6 +122,7 @@ imagegen:
         - { name: negativePrompt, type: TEXT }
         - { name: seconds, type: INT, default: '5', min: 2, max: 6 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
+        - { name: keepFace, type: BOOL, default: 'true' }
         - { name: seed, type: SEED }
     - id: wan22-i2v
       kind: VIDEO
@@ -133,6 +134,7 @@ imagegen:
         - { name: negativePrompt, type: TEXT }
         - { name: seconds, type: INT, default: '5', min: 2, max: 6 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
+        - { name: keepFace, type: BOOL, default: 'true' }
         - { name: seed, type: SEED }
     - id: ltx25-i2v
       kind: VIDEO
@@ -145,6 +147,7 @@ imagegen:
         - { name: negativePrompt, type: TEXT }
         - { name: seconds, type: INT, default: '5', min: 2, max: 12 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
+        - { name: keepFace, type: BOOL, default: 'true' }
         - { name: seed, type: SEED }
     - id: ltx25-nsfw-i2v
       kind: VIDEO
@@ -157,4 +160,5 @@ imagegen:
         - { name: negativePrompt, type: TEXT }
         - { name: seconds, type: INT, default: '5', min: 2, max: 12 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
+        - { name: keepFace, type: BOOL, default: 'true' }
         - { name: seed, type: SEED }

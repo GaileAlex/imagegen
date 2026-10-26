@@ -44,7 +44,9 @@ public class WorkflowRepository {
             if (!graph.has(output)) {
                 throw new IllegalStateException("Workflow " + id + " has no output node " + output);
             }
-            return new WorkflowTemplate(id, graph, output, params);
+            String anchor = description.path("keepFace").asString("");
+            return new WorkflowTemplate(id, graph, output, params,
+                    anchor.isEmpty() ? null : FaceAnchor.valueOf(anchor));
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot read the workflow " + id, e);
         }

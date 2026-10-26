@@ -124,6 +124,17 @@ class JobFactoryTest {
     }
 
     @Test
+    void videosKeepTheFaceUnlessTheClientTurnsItOff() {
+        assertThat(create("wan22-i2v", params("prompt", "x")).getParams()).containsEntry("keepFace", true);
+        assertThat(create("ltx25-i2v", params("prompt", "x", "keepFace", false)).getParams())
+                .containsEntry("keepFace", false);
+        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "keepFace", "yes")))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("keepFace");
+        assertThatThrownBy(() -> create("muse-txt2img", params("prompt", "x", "keepFace", true)))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Unknown param");
+    }
+
+    @Test
     void wanStillNeedsAnImage() {
         assertThatThrownBy(() -> factory.create(UUID.randomUUID(), 7, "alex",
                 TestCatalogue.model("wan22-i2v-fastmove"), params("prompt", "x"), null, false))

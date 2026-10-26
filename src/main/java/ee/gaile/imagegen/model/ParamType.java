@@ -7,5 +7,7 @@ public enum ParamType {
     /** One of the options */
     ENUM,
     /** A number from 0 to 2^31-1, empty = random */
-    SEED
+    SEED,
+    /** true or false */
+    BOOL
 }
