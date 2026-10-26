@@ -69,6 +69,7 @@ class FileJobRepositoryTest {
         job.setFinishedAt(clock.instant());
         job.setResult(new JobResult("video/mp4", 1234, 832, 480, 5.0));
         job.setTranslations(Map.of("prompt", "a ginger cat"));
+        job.setSourceJobId(new UUID(1, 2));
         repository.save(job);
 
         Job loaded = restart().find(job.getId()).orElseThrow();
@@ -85,6 +86,7 @@ class FileJobRepositoryTest {
         assertThat(loaded.getFinishedAt()).isEqualTo(job.getFinishedAt());
         assertThat(loaded.getResult()).isEqualTo(new JobResult("video/mp4", 1234, 832, 480, 5.0));
         assertThat(loaded.getTranslations()).isEqualTo(Map.of("prompt", "a ginger cat"));
+        assertThat(loaded.getSourceJobId()).isEqualTo(new UUID(1, 2));
     }
 
     @Test

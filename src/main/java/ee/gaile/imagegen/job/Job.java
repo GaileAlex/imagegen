@@ -33,6 +33,8 @@ public class Job {
     private volatile JobResult result;
     /** Param name -> the English text that went to ComfyUI instead of the Russian one; empty when none was needed */
     private volatile Map<String, String> translations = Map.of();
+    /** An image job that had not finished at the submit: its picture becomes the input when this job starts */
+    private volatile UUID sourceJobId;
 
     /** Not stored: only meaningful while RUNNING */
     private volatile Progress progress;

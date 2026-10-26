@@ -28,6 +28,7 @@ public class JobQueue {
 
     private final ComfyGateway gateway;
     private final PromptTranslator translator;
+    private final SourceInputs sourceInputs;
     private final JobRepository repository;
     private final ImagegenProperties properties;
     private final Clock clock;
@@ -207,6 +208,9 @@ public class JobQueue {
         JobResult result = null;
         String error = null;
         try {
+            if (job.getSourceJobId() != null) {
+                sourceInputs.prepare(job);
+            }
             translate(job);
             // A cancel during the translation: ComfyUI never gets the job
             if (!job.isCancelRequested()) {

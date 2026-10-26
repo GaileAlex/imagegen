@@ -3,6 +3,7 @@ package ee.gaile.imagegen.service;
 import ee.gaile.imagegen.gpu.UnloadPolicy;
 import ee.gaile.imagegen.job.ComfyGateway;
 import ee.gaile.imagegen.job.Job;
+import ee.gaile.imagegen.job.JobFailedException;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.JobQueue;
 import ee.gaile.imagegen.job.JobResult;
@@ -61,8 +62,8 @@ class JobServiceTest {
     @BeforeEach
     void setUp() {
         files = new JobFiles(directory);
-        service = new JobService(TestCatalogue.get(), new JobFactory(new MutableClock()), store, files, queue, policy,
-                gateway, TestCatalogue.MAPPER);
+        service = new JobService(TestCatalogue.get(), new JobFactory(new MutableClock()), new SourceImages(store, files),
+                files, queue, policy, gateway, TestCatalogue.MAPPER);
         given(gateway.isUp()).willReturn(true);
     }
 
@@ -210,7 +211,7 @@ class JobServiceTest {
     }
 
     @Test
-    void sourceJobIdOfAnotherUserOrAnUnfinishedJobIsRefused() {
+    void sourceJobIdOfAnotherUserAFailedOrAMissingJobIsRefused() {
         UUID sourceId = UUID.randomUUID();
         Job source = new Job(sourceId, 2, "b", "muse-txt2img", JobKind.IMAGE, Map.of("seed", 1), 1, null);
         source.setStatus(JobStatus.DONE);
@@ -221,11 +222,55 @@ class JobServiceTest {
         assertThatThrownBy(() -> service.submit(1, "a", request, null, null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("sourceJobId");
 
-        source.setStatus(JobStatus.RUNNING);
+        source.setStatus(JobStatus.FAILED);
+        source.setResult(null);
         assertThatThrownBy(() -> service.submit(2, "b", request, null, null))
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> service.submit(2, "b", request.replace(sourceId.toString(),
                 UUID.randomUUID().toString()), null, null)).isInstanceOf(InvalidParamsException.class);
+    }
+
+    @Test
+    void aVideoWaitsForAPictureStillInTheQueueButAnEditDoesNot() throws IOException {
+        UUID sourceId = UUID.randomUUID();
+        Job source = new Job(sourceId, 1, "a", "muse-txt2img", JobKind.IMAGE, Map.of("seed", 1), 1, null);
+        given(store.find(sourceId)).willReturn(Optional.of(source));
+
+        Job video = service.submit(1, "a", "{\"model\":\"wan22-i2v-fastmove\",\"params\":{\"prompt\":\"walks\"},"
+                + "\"sourceJobId\":\"" + sourceId + "\"}", null, null).job();
+
+        assertThat(video.getSourceJobId()).isEqualTo(sourceId);
+        assertThat(files.input(video.getId())).doesNotExist();
+        assertThatThrownBy(() -> service.submit(1, "a", "{\"model\":\"muse-edit\",\"params\":{\"prompt\":\"x\"},"
+                + "\"sourceJobId\":\"" + sourceId + "\"}", null, null))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("only a video");
+        assertThat(fileCount()).isZero();
+
+        source.setStatus(JobStatus.DONE);
+        source.setResult(new JobResult("image/png", 1, 3000, 1500, null));
+        Files.write(files.result(sourceId, "image/png"), png(3000, 1500));
+        new SourceImages(store, files).prepare(video);
+
+        BufferedImage start = ImageIO.read(files.input(video.getId()).toFile());
+        assertThat(start.getWidth()).isEqualTo(2048);
+        assertThat(start.getHeight()).isEqualTo(1024);
+    }
+
+    @Test
+    void aVideoWhosePictureFailedFailsAtItsStart() {
+        UUID sourceId = UUID.randomUUID();
+        Job source = new Job(sourceId, 1, "a", "muse-txt2img", JobKind.IMAGE, Map.of("seed", 1), 1, null);
+        source.setStatus(JobStatus.CANCELLED);
+        given(store.find(sourceId)).willReturn(Optional.of(source));
+        Job video = new Job(UUID.randomUUID(), 1, "a", "wan22-i2v-fastmove", JobKind.VIDEO, Map.of(), 1, null);
+        video.setSourceJobId(sourceId);
+        SourceImages sources = new SourceImages(store, files);
+
+        assertThatThrownBy(() -> sources.prepare(video))
+                .isInstanceOf(JobFailedException.class).hasMessageContaining("CANCELLED");
+        given(store.find(sourceId)).willReturn(Optional.empty());
+        assertThatThrownBy(() -> sources.prepare(video))
+                .isInstanceOf(JobFailedException.class).hasMessageContaining("gone");
     }
 
     @Test

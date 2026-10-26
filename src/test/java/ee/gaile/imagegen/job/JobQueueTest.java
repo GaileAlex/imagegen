@@ -25,11 +25,19 @@ public class JobQueueTest {
     private final FakeTranslator translator = new FakeTranslator();
     private final List<JobStatus> saved = new CopyOnWriteArrayList<>();
     private final MutableClock clock = new MutableClock();
+    private final List<Job> prepared = new CopyOnWriteArrayList<>();
+    private volatile String sourceProblem;
     private JobQueue queue;
 
     @BeforeEach
     void setUp() {
-        queue = new JobQueue(gateway, translator, job -> saved.add(job.getStatus()), PROPERTIES, clock);
+        SourceInputs sources = job -> {
+            if (sourceProblem != null) {
+                throw new JobFailedException(sourceProblem);
+            }
+            prepared.add(job);
+        };
+        queue = new JobQueue(gateway, translator, sources, job -> saved.add(job.getStatus()), PROPERTIES, clock);
         queue.start();
     }
 
@@ -173,6 +181,37 @@ public class JobQueueTest {
         assertThat(translator.calls).isZero();
         assertThat(job.getTranslations()).isEmpty();
         gateway.complete(job);
+    }
+
+    @Test
+    void theStartImageOfAWaitingVideoIsPreparedWhenItsTurnComes() throws InterruptedException {
+        Job picture = job(1, "picture");
+        Job video = new Job(UUID.randomUUID(), 1, "user1", "video", JobKind.VIDEO, Map.of(), 1, null);
+        video.setSourceJobId(picture.getId());
+        queue.submit(picture);
+        gateway.awaitRunning();
+        queue.submit(video);
+
+        assertThat(prepared).isEmpty();
+        gateway.complete(picture);
+
+        assertThat(gateway.awaitRunning()).isSameAs(video);
+        assertThat(prepared).containsExactly(video);
+        gateway.complete(video);
+        await().until(() -> video.getStatus() == JobStatus.DONE);
+    }
+
+    @Test
+    void aVideoWithoutItsStartImageFailsWithoutComfyUi() {
+        sourceProblem = "the start image job ended as FAILED";
+        Job video = new Job(UUID.randomUUID(), 1, "user1", "video", JobKind.VIDEO, Map.of(), 1, null);
+        video.setSourceJobId(UUID.randomUUID());
+
+        queue.submit(video);
+
+        await().until(() -> video.getStatus() == JobStatus.FAILED);
+        assertThat(video.getError()).isEqualTo("the start image job ended as FAILED");
+        assertThat(gateway.started).isEmpty();
     }
 
     @Test

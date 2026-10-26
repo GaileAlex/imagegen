@@ -89,6 +89,12 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
 `sourceJobId` = a DONE image job of the same user used as the input image instead of the `image` part (animate or
 edit a picture generated before, without downloading and uploading it). For LTX both are optional.
 
+For a video, `sourceJobId` may also be an image job still QUEUED or RUNNING: the page sends the picture job and the
+video right after it ("a video from a text" for Wan). The video waits in the queue behind it; when its turn comes, the
+picture is written as its input (`/input` answers 404 until then). A picture job that failed, was cancelled or deleted
+by then fails the video with an error like `"the start image job ended as CANCELLED"`, without ComfyUI. Other kinds
+are refused with 400 while the source has not finished.
+
 Answer `202`:
 
 ```json

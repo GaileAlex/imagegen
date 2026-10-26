@@ -5,8 +5,6 @@ import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.JobQueue;
-import ee.gaile.imagegen.job.JobStatus;
-import ee.gaile.imagegen.storage.JobStore;
 import ee.gaile.imagegen.gpu.UnloadPolicy;
 import ee.gaile.imagegen.image.InputImages;
 import ee.gaile.imagegen.model.ModelCatalogue;
@@ -17,10 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.awt.Dimension;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -33,7 +28,7 @@ public class JobService {
 
     private final ModelCatalogue catalogue;
     private final JobFactory factory;
-    private final JobStore store;
+    private final SourceImages sources;
     private final JobFiles files;
     private final JobQueue queue;
     private final UnloadPolicy unloadPolicy;
@@ -59,9 +54,15 @@ public class JobService {
         BufferedImage picture = null;
         BufferedImage maskPicture = null;
         Dimension size = null;
-        boolean imageGiven = request.sourceJobId() != null || (image != null && image.length > 0);
-        if (model.needsImage() || (model.acceptsImage() && imageGiven)) {
-            picture = prepareImage(model, userId, request, image);
+        Job source = request.sourceJobId() != null ? sources.find(userId, request.sourceJobId()) : null;
+        // A video waits in the queue behind the picture it starts from, which is written as its input then
+        boolean pendingSource = source != null && !source.getStatus().isFinished();
+        if (pendingSource && model.kind() != JobKind.VIDEO) {
+            throw new InvalidParamsException("sourceJobId has not finished: only a video can wait for it");
+        }
+        boolean imageGiven = source != null || (image != null && image.length > 0);
+        if (!pendingSource && (model.needsImage() || (model.acceptsImage() && imageGiven))) {
+            picture = prepareImage(model, source, image);
             if (model.kind() != JobKind.VIDEO) {
                 size = InputImages.editSize(picture.getWidth(), picture.getHeight());
                 picture = InputImages.scale(picture, size.width, size.height);
@@ -75,7 +76,11 @@ public class JobService {
             }
             maskPicture = InputImages.mask(mask, picture.getWidth(), picture.getHeight());
         }
-        Job job = factory.create(id, userId, userName, model, request.params(), size, picture != null);
+        Job job = factory.create(id, userId, userName, model, request.params(), size,
+                picture != null || pendingSource);
+        if (pendingSource) {
+            job.setSourceJobId(source.getId());
+        }
 
         writeInputs(id, picture, maskPicture);
         try {
@@ -89,31 +94,17 @@ public class JobService {
     }
 
     /**
-     * @return the DONE image result of the user's earlier job, or the uploaded image
+     * @param source a finished image job of the user, or null
+     * @return the picture of the source, or the uploaded image
      */
-    private BufferedImage prepareImage(ModelDefinition model, long userId, JobRequest request, byte[] upload) {
-        if (request.sourceJobId() != null) {
-            return InputImages.decode(readSource(userId, request.sourceJobId()));
+    private BufferedImage prepareImage(ModelDefinition model, Job source, byte[] upload) {
+        if (source != null) {
+            return InputImages.decode(sources.read(source));
         }
         if (upload == null || upload.length == 0) {
             throw new InvalidParamsException(model.id() + " needs an image");
         }
         return InputImages.decode(upload);
-    }
-
-    private byte[] readSource(long userId, UUID sourceJobId) {
-        Optional<Job> source = store.find(sourceJobId)
-                .filter(job -> job.getUserId() == userId)
-                .filter(job -> job.getStatus() == JobStatus.DONE)
-                .filter(job -> job.getResult() != null && job.getResult().contentType().startsWith("image/"));
-        if (source.isEmpty()) {
-            throw new InvalidParamsException("sourceJobId is not a finished image of yours");
-        }
-        try {
-            return Files.readAllBytes(files.result(sourceJobId, source.get().getResult().contentType()));
-        } catch (IOException e) {
-            throw new InvalidParamsException("The image of sourceJobId is gone");
-        }
     }
 
     private void writeInputs(UUID id, BufferedImage picture, BufferedImage mask) {
