@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: imagegen
+  threads:
+    virtual:
+      enabled: true
+  ###########################################
+  ## MULTIPART (MultipartProperties)
+  ###########################################
+  # A photo for an edit or a video start frame (contract: at most 20 MB) plus its mask
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 45MB
+
+server:
+  port: 8390
+
+###########################################
+## MONITORING (project observability)
+###########################################
+# Actuator has its own port, not published: Prometheus scrapes http://cv-imagegen-app:8081/actuator/prometheus
+management:
+  server:
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      application: imagegen
+  tracing:
+    sampling:
+      probability: 1.0
+
+imagegen:
+  comfyui-url: ${COMFYUI_URL:http://cv-comfyui:8188}
+  # The volume imagegen-results
+  data-dir: /data
+  idle-unload: 30m
+  # The page sends a heartbeat every 60 s
+  presence-timeout: 150s
+  retention: 10d
+  job-timeout: 15m
+  max-jobs-per-user: 3
+  max-queue: 10

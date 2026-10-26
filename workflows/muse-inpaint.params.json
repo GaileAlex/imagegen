@@ -1,0 +1,93 @@
+{
+  "description": "Muse inpaint: redraws only the masked area of an uploaded photo, the rest stays as it was",
+  "output": "9",
+  "timing": "1184x888 20 steps ~60-70 s",
+  "params": {
+    "image": {
+      "targets": [
+        "15.image"
+      ],
+      "default": "source.png",
+      "note": "uploaded photo name (POST /upload/image); width/height must be its size"
+    },
+    "mask": {
+      "targets": [
+        "102.image"
+      ],
+      "default": "mask.png",
+      "note": "uploaded mask, same size as the photo, white = area to redraw (red channel)"
+    },
+    "prompt": {
+      "targets": [
+        "6.prompt"
+      ],
+      "default": "",
+      "note": "describe what is in the masked area, e.g. \"a ginger cat sleeping on a dark blue bed sheet\""
+    },
+    "negativePrompt": {
+      "targets": [
+        "7.prompt"
+      ],
+      "default": ""
+    },
+    "seed": {
+      "targets": [
+        "10.noise_seed"
+      ],
+      "default": 0
+    },
+    "steps": {
+      "targets": [
+        "6.steps",
+        "7.steps",
+        "10.steps"
+      ],
+      "default": 16
+    },
+    "cfg": {
+      "targets": [
+        "10.cfg"
+      ],
+      "default": 2.5
+    },
+    "startStep": {
+      "targets": [
+        "10.start_at_step"
+      ],
+      "default": 0,
+      "note": "0 = new content in the mask; 2 of 20 (creativity 0.9) keeps too much of the old pixels"
+    },
+    "width": {
+      "targets": [
+        "6.width",
+        "6.target_width",
+        "7.width",
+        "7.target_width"
+      ],
+      "default": 1184,
+      "note": "photo size, multiple of 16"
+    },
+    "height": {
+      "targets": [
+        "6.height",
+        "6.target_height",
+        "7.height",
+        "7.target_height"
+      ],
+      "default": 888
+    },
+    "maskBlur": {
+      "targets": [
+        "122.blur_radius"
+      ],
+      "default": 48,
+      "note": "edge softness of the paste-back, max 64"
+    },
+    "filenamePrefix": {
+      "targets": [
+        "9.filename_prefix"
+      ],
+      "default": "muse-inpaint"
+    }
+  }
+}

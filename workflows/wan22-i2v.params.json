@@ -1,0 +1,60 @@
+{
+  "description": "Wan 2.2 I2V 14B fp8 + lightx2v 4-step LoRAs (2 steps high noise expert, 2 steps low noise expert); mp4 without sound",
+  "output": "17",
+  "timing": "832x480 81 frames: 175 s with the model load",
+  "params": {
+    "image": {
+      "targets": [
+        "11.image"
+      ],
+      "default": "start.png",
+      "note": "first frame, resized and center-cropped to width x height"
+    },
+    "prompt": {
+      "targets": [
+        "9.text"
+      ],
+      "default": "",
+      "note": "describe the motion"
+    },
+    "negativePrompt": {
+      "targets": [
+        "10.text"
+      ],
+      "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+      "note": "stock Chinese negative of the template"
+    },
+    "seed": {
+      "targets": [
+        "13.noise_seed"
+      ],
+      "default": 0
+    },
+    "width": {
+      "targets": [
+        "12.width"
+      ],
+      "default": 832,
+      "note": "832x480 or 480x832"
+    },
+    "height": {
+      "targets": [
+        "12.height"
+      ],
+      "default": 480
+    },
+    "frames": {
+      "targets": [
+        "12.length"
+      ],
+      "default": 81,
+      "note": "16 fps: 81 = 5 s; 4n+1"
+    },
+    "filenamePrefix": {
+      "targets": [
+        "17.filename_prefix"
+      ],
+      "default": "wan"
+    }
+  }
+}

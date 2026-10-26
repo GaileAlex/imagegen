@@ -1,0 +1,68 @@
+{
+  "description": "fluxedUp NSFW 11.2 (Flux.1 Dev): photo style only, may undress people without being asked. SwarmUI mistakes the file for LongCat-Image (that is why it failed there); here it is a plain Flux UNETLoader with clip_l + t5xxl",
+  "output": "14",
+  "timing": "1024x1024: euler 28 steps 63 s, dpmpp_sde/beta 35 steps 149-171 s; container RAM ~31 GB while loading",
+  "params": {
+    "prompt": {
+      "targets": [
+        "5.text"
+      ],
+      "default": ""
+    },
+    "seed": {
+      "targets": [
+        "10.noise_seed"
+      ],
+      "default": 0
+    },
+    "steps": {
+      "targets": [
+        "9.steps"
+      ],
+      "default": 35,
+      "note": "author's workflow; euler/simple needs ~28"
+    },
+    "guidance": {
+      "targets": [
+        "6.guidance"
+      ],
+      "default": 4.0,
+      "note": "Flux guidance (CFG stays 1)"
+    },
+    "sampler": {
+      "targets": [
+        "8.sampler_name"
+      ],
+      "default": "dpmpp_sde",
+      "note": "author; two model calls per step: 149-171 s, euler/simple 28 steps = 63 s"
+    },
+    "scheduler": {
+      "targets": [
+        "9.scheduler"
+      ],
+      "default": "beta",
+      "note": "author"
+    },
+    "width": {
+      "targets": [
+        "4.width",
+        "11.width"
+      ],
+      "default": 1024,
+      "note": "multiple of 16; author uses 1152x1728 portrait"
+    },
+    "height": {
+      "targets": [
+        "4.height",
+        "11.height"
+      ],
+      "default": 1024
+    },
+    "filenamePrefix": {
+      "targets": [
+        "14.filename_prefix"
+      ],
+      "default": "fluxedup"
+    }
+  }
+}

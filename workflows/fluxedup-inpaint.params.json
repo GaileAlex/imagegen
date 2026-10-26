@@ -1,0 +1,83 @@
+{
+  "description": "fluxedUp inpaint of an uploaded photo; most photo-real result, but hit or miss per seed",
+  "output": "14",
+  "timing": "1184x888 35 steps dpmpp_sde ~140-160 s",
+  "params": {
+    "image": {
+      "targets": [
+        "20.image"
+      ],
+      "default": "source.png"
+    },
+    "mask": {
+      "targets": [
+        "21.image"
+      ],
+      "default": "mask.png",
+      "note": "white = area to redraw"
+    },
+    "prompt": {
+      "targets": [
+        "5.text"
+      ],
+      "default": ""
+    },
+    "seed": {
+      "targets": [
+        "10.noise_seed"
+      ],
+      "default": 0,
+      "note": "seed matters a lot: seed 1 left the area empty, seed 2 drew a very good cat"
+    },
+    "steps": {
+      "targets": [
+        "9.steps"
+      ],
+      "default": 35
+    },
+    "guidance": {
+      "targets": [
+        "6.guidance"
+      ],
+      "default": 4.0
+    },
+    "sampler": {
+      "targets": [
+        "8.sampler_name"
+      ],
+      "default": "dpmpp_sde",
+      "note": "euler/simple 28 steps + guidance 10 drew nothing in the one test"
+    },
+    "scheduler": {
+      "targets": [
+        "9.scheduler"
+      ],
+      "default": "beta"
+    },
+    "width": {
+      "targets": [
+        "4.width"
+      ],
+      "default": 1184,
+      "note": "photo size, used for the Flux shift only"
+    },
+    "height": {
+      "targets": [
+        "4.height"
+      ],
+      "default": 888
+    },
+    "maskBlur": {
+      "targets": [
+        "24.blur_radius"
+      ],
+      "default": 48
+    },
+    "filenamePrefix": {
+      "targets": [
+        "14.filename_prefix"
+      ],
+      "default": "fluxedup-inpaint"
+    }
+  }
+}

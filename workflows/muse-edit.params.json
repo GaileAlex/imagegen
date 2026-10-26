@@ -1,0 +1,81 @@
+{
+  "description": "Muse + Krea 2 General Edit V2 LoRA (conradlocke, personal/non-commercial licence) via comfyui-krea2edit nodes: edit an uploaded photo by a plain instruction, no mask. The whole picture is re-rendered (very close to the photo); muse-inpaint keeps the pixels outside the mask exactly",
+  "output": "13",
+  "timing": "1184x888 10 steps: 57-62 s warm, 88 s with the LoRA load",
+  "params": {
+    "image": {
+      "targets": [
+        "4.image"
+      ],
+      "default": "source.png",
+      "note": "uploaded photo; the output keeps its layout"
+    },
+    "prompt": {
+      "targets": [
+        "8.prompt"
+      ],
+      "default": "",
+      "note": "plain instruction: \"Add a ginger cat sleeping on the bed\", \"Remove the white pillow\", \"Make it night\""
+    },
+    "seed": {
+      "targets": [
+        "11.seed"
+      ],
+      "default": 0
+    },
+    "steps": {
+      "targets": [
+        "11.steps"
+      ],
+      "default": 10,
+      "note": "LoRA author: 8 for Turbo; 16 steps + CFG 2 also removed the pillow when adding the cat"
+    },
+    "cfg": {
+      "targets": [
+        "11.cfg"
+      ],
+      "default": 1.0,
+      "note": "author: 1 for most edits, 3 (20 steps) for big removals; the negative is already grounded on the photo"
+    },
+    "width": {
+      "targets": [
+        "7.width"
+      ],
+      "default": 1184,
+      "note": "output size = photo size (multiple of 16, at most ~2 MP)"
+    },
+    "height": {
+      "targets": [
+        "7.height"
+      ],
+      "default": 888
+    },
+    "refBoost": {
+      "targets": [
+        "10.ref_boost"
+      ],
+      "default": 4.0,
+      "note": "pull toward the source photo; author: 4 for General Edit"
+    },
+    "groundingPx": {
+      "targets": [
+        "8.grounding_px",
+        "9.grounding_px"
+      ],
+      "default": 768,
+      "note": "longest side of the photo shown to Qwen3-VL (trained at 768)"
+    },
+    "loraStrength": {
+      "targets": [
+        "5.strength_model"
+      ],
+      "default": 1.0
+    },
+    "filenamePrefix": {
+      "targets": [
+        "13.filename_prefix"
+      ],
+      "default": "muse-edit"
+    }
+  }
+}

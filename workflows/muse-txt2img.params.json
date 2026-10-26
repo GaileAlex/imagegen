@@ -1,0 +1,68 @@
+{
+  "description": "Muse (Krea 2 fine-tune) text to image, same graph as SwarmUI 0.9.8.4 builds; same seed = same picture",
+  "output": "9",
+  "timing": "RTX 5060 Ti: 1024x1024 20 steps ~63 s warm, 67 s after /free; 1216x704 16 steps 44 s",
+  "params": {
+    "prompt": {
+      "targets": [
+        "6.prompt"
+      ],
+      "default": ""
+    },
+    "negativePrompt": {
+      "targets": [
+        "7.prompt"
+      ],
+      "default": ""
+    },
+    "seed": {
+      "targets": [
+        "10.noise_seed"
+      ],
+      "default": 0
+    },
+    "steps": {
+      "targets": [
+        "6.steps",
+        "7.steps",
+        "10.steps"
+      ],
+      "default": 16,
+      "note": "author: 8-20, 16 best; 20 steps at CFG 3.5+ gave colour mosaics"
+    },
+    "cfg": {
+      "targets": [
+        "10.cfg"
+      ],
+      "default": 2.5,
+      "note": "author: 1-2.5, above 3 the image breaks"
+    },
+    "width": {
+      "targets": [
+        "5.width",
+        "6.width",
+        "6.target_width",
+        "7.width",
+        "7.target_width"
+      ],
+      "default": 1024,
+      "note": "multiple of 16, 1024-2048"
+    },
+    "height": {
+      "targets": [
+        "5.height",
+        "6.height",
+        "6.target_height",
+        "7.height",
+        "7.target_height"
+      ],
+      "default": 1024
+    },
+    "filenamePrefix": {
+      "targets": [
+        "9.filename_prefix"
+      ],
+      "default": "muse"
+    }
+  }
+}

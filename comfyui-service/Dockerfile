@@ -36,6 +36,11 @@ RUN tar -xzf /tmp/swarmui.tar.gz -C /tmp \
     rm -rf /tmp/swarmui.tar.gz /tmp/SwarmUI-$SWARMUI_COMMIT && \
     pip install --no-cache-dir opencv-python-headless==4.11.0.86
 
+# Photo edits by instruction on Krea 2 / Muse: the nodes the Krea 2 General Edit LoRA was trained with (v2.0.0)
+ARG KREA2EDIT_COMMIT=13ef60f20828949becada815d3cbc371eb5ccaab
+RUN git clone https://github.com/lbouaraba/comfyui-krea2edit /app/custom_nodes/comfyui-krea2edit && \
+    cd /app/custom_nodes/comfyui-krea2edit && git checkout $KREA2EDIT_COMMIT && rm -rf .git node.zip tests
+
 # Triton compiles its launchers at run time (the int8 kernels of comfy-kitchen: Muse, the LTX encoder)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc python3-dev && \
     rm -rf /var/lib/apt/lists/*

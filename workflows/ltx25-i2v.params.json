@@ -1,0 +1,59 @@
+{
+  "description": "LTX-2.5 22B distilled Q4_K_M GGUF + Gemma 4 12B abliterated encoder; video with AAC stereo sound. The template prompt enhancer (gemma4 e2b) is left out",
+  "output": "31",
+  "timing": "1216x704 121 frames: 152 s with the load, 114 s warm",
+  "params": {
+    "image": {
+      "targets": [
+        "6.image"
+      ],
+      "default": "start.png"
+    },
+    "prompt": {
+      "targets": [
+        "8.text"
+      ],
+      "default": "",
+      "note": "motion, camera and sound (\"a soft meow\", ambience)"
+    },
+    "negativePrompt": {
+      "targets": [
+        "9.text"
+      ],
+      "default": "pc game, console game, video game, cartoon, childish, ugly"
+    },
+    "seed": {
+      "targets": [
+        "16.noise_seed"
+      ],
+      "default": 0
+    },
+    "halfWidth": {
+      "targets": [
+        "11.width"
+      ],
+      "default": 608,
+      "note": "stage 1 size = half of the final, multiple of 32 (final 1216x704)"
+    },
+    "halfHeight": {
+      "targets": [
+        "11.height"
+      ],
+      "default": 352
+    },
+    "frames": {
+      "targets": [
+        "11.length",
+        "13.frames_number"
+      ],
+      "default": 121,
+      "note": "24 fps: 121 = 5 s; 8n+1"
+    },
+    "filenamePrefix": {
+      "targets": [
+        "31.filename_prefix"
+      ],
+      "default": "ltx"
+    }
+  }
+}
