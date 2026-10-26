@@ -115,8 +115,19 @@ imagegen:
     - id: wan22-i2v-fastmove
       kind: VIDEO
       title: Wan 2.2 Fast Move
-      description: Video from a start image, lively motion, no sound. 832x480 (16 fps).
+      description: Video from a start image, lively motion, no sound; the face of a real person may drift (Wan 2.2 keeps it better). 832x480 (16 fps).
       typical-seconds: 160
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: negativePrompt, type: TEXT }
+        - { name: seconds, type: INT, default: '5', min: 2, max: 6 }
+        - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
+        - { name: seed, type: SEED }
+    - id: wan22-i2v
+      kind: VIDEO
+      title: Wan 2.2
+      description: Video from a start image that keeps the face of a real person best; calmer motion than Fast Move, no sound. 832x480 (16 fps).
+      typical-seconds: 145
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }

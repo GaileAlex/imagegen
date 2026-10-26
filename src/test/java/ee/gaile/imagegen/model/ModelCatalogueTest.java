@@ -17,10 +17,10 @@ class ModelCatalogueTest {
     }
 
     @Test
-    void listsTheEightModesInTheOrderOfTheContract() {
+    void listsTheNineModesInTheOrderOfTheContract() {
         assertThat(catalogue.list()).extracting(ModelDefinition::id).containsExactly("muse-txt2img",
                 "fluxedup-txt2img", "muse-edit", "muse-inpaint", "fluxedup-inpaint", "wan22-i2v-fastmove",
-                "ltx25-i2v", "ltx25-nsfw-i2v");
+                "wan22-i2v", "ltx25-i2v", "ltx25-nsfw-i2v");
     }
 
     @Test

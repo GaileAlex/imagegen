@@ -34,7 +34,7 @@ class ImagegenApplicationTests {
 
     @Test
     void contextLoadsWithTheCatalogueOfTheContract() {
-        assertThat(catalogue.list()).hasSize(8);
+        assertThat(catalogue.list()).hasSize(9);
         assertThat(dataDir.resolve("jobs")).isDirectory();
     }
 }

@@ -28,7 +28,7 @@ class ModelControllerTest {
 
         mockMvc.perform(get("/api/models"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(8))
+                .andExpect(jsonPath("$.length()").value(9))
                 .andExpect(jsonPath("$[0].id").value("muse-txt2img"))
                 .andExpect(jsonPath("$[0].kind").value("IMAGE"))
                 .andExpect(jsonPath("$[0].needsImage").value(false))
