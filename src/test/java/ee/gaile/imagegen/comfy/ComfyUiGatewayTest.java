@@ -140,6 +140,27 @@ class ComfyUiGatewayTest {
         assertThat(graph.at("/11/inputs/height").asInt()).isEqualTo(608);
         assertThat(graph.at("/6/inputs/image").asString()).isEqualTo(job.getId() + ".input.png");
         assertThat(graph.at("/31/inputs/filename_prefix").asString()).isEqualTo(job.getId().toString());
+        assertThat(graph.at("/12/inputs/bypass").asBoolean()).isFalse();
+        assertThat(graph.at("/22/inputs/bypass").asBoolean()).isFalse();
+    }
+
+    @Test
+    void ltxWithoutAStartImageSkipsTheImageNodesAndUploadsAPlaceholder() {
+        Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-i2v"),
+                params("prompt", "walks", "seconds", 2), null, false);
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andExpect(content().string(containsString(job.getId() + ".input.png")))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/prompt"))
+                .andExpect(jsonPath("$.prompt['12'].inputs.bypass").value(true))
+                .andExpect(jsonPath("$.prompt['22'].inputs.bypass").value(true))
+                .andExpect(jsonPath("$.prompt['6'].inputs.image").value(job.getId() + ".input.png"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"error\":{\"message\":\"stop here\"}}"));
+
+        assertThatThrownBy(() -> gateway.run(job, sink, later())).isInstanceOf(JobFailedException.class);
+        assertThat(files.input(job.getId())).doesNotExist();
+        server.verify();
     }
 
     @Test

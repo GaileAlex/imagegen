@@ -125,11 +125,12 @@ imagegen:
     - id: ltx25-i2v
       kind: VIDEO
       title: LTX 2.5
-      description: Video with sound from a start image. 1216x704 (24 fps).
+      description: Video with sound from a text, or from a start image when one is given. 1216x704 (24 fps).
       typical-seconds: 115
+      image-optional: true
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
-        - { name: seconds, type: INT, default: '5', min: 2, max: 8 }
+        - { name: seconds, type: INT, default: '5', min: 2, max: 12 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
         - { name: seed, type: SEED }

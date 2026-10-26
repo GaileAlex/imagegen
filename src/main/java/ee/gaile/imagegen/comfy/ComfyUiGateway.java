@@ -7,6 +7,7 @@ import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.JobResult;
 import ee.gaile.imagegen.job.Progress;
+import ee.gaile.imagegen.service.JobFactory;
 import ee.gaile.imagegen.service.WorkflowValues;
 import ee.gaile.imagegen.model.workflow.ParamSpec;
 import ee.gaile.imagegen.model.workflow.WorkflowRepository;
@@ -14,7 +15,9 @@ import ee.gaile.imagegen.model.workflow.WorkflowTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -28,6 +31,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -54,6 +58,8 @@ public class ComfyUiGateway implements ComfyGateway {
     /** Failed /history calls in a row for this long: ComfyUI is gone, the job will not finish */
     private static final Duration UNREACHABLE = Duration.ofSeconds(60);
     private static final int MAX_ERROR_BODY = 300;
+    /** Start image of a video made from the text alone: never used, so a black 64x64 */
+    private static final byte[] PLACEHOLDER = placeholder();
 
     private final RestClient client;
     private final RestClient probeClient;
@@ -181,15 +187,26 @@ public class ComfyUiGateway implements ComfyGateway {
         if (job.getKind() == JobKind.IMAGE) {
             return;
         }
-        upload(files.input(job.getId()));
+        Path input = files.input(job.getId());
+        if (Boolean.TRUE.equals(job.getParams().get(JobFactory.TEXT_ONLY))) {
+            // The workflow skips the start image, but ComfyUI still wants the file of its LoadImage node
+            upload(new ByteArrayResource(PLACEHOLDER) {
+                @Override
+                public String getFilename() {
+                    return input.getFileName().toString();
+                }
+            });
+            return;
+        }
+        upload(new FileSystemResource(input));
         if (job.getKind() == JobKind.INPAINT) {
-            upload(files.mask(job.getId()));
+            upload(new FileSystemResource(files.mask(job.getId())));
         }
     }
 
-    private void upload(Path file) {
+    private void upload(Resource image) {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("image", new FileSystemResource(file));
+        body.add("image", image);
         body.add("overwrite", "true");
         client.post().uri("/upload/image").contentType(MediaType.MULTIPART_FORM_DATA).body(body)
                 .retrieve().toBodilessEntity();
@@ -406,5 +423,15 @@ public class ComfyUiGateway implements ComfyGateway {
             return "";
         }
         return text.length() > MAX_ERROR_BODY ? text.substring(0, MAX_ERROR_BODY) + "..." : text;
+    }
+
+    private static byte[] placeholder() {
+        try {
+            ByteArrayOutputStream png = new ByteArrayOutputStream();
+            ImageIO.write(new BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB), "png", png);
+            return png.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }

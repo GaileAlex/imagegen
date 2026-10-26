@@ -24,7 +24,7 @@ class ModelCatalogueTest {
     }
 
     @Test
-    void imagesNeedNoInputAndInpaintNeedsAMask() {
+    void imagesNeedNoInputInpaintNeedsAMaskAndLtxRunsFromTheTextAlone() {
         ModelDefinition txt = TestCatalogue.model("muse-txt2img");
         ModelDefinition inpaint = TestCatalogue.model("muse-inpaint");
         ModelDefinition video = TestCatalogue.model("ltx25-i2v");
@@ -33,7 +33,10 @@ class ModelCatalogueTest {
         assertThat(txt.needsImage()).isFalse();
         assertThat(inpaint.needsImage()).isTrue();
         assertThat(inpaint.needsMask()).isTrue();
-        assertThat(video.needsImage()).isTrue();
+        assertThat(video.needsImage()).isFalse();
+        assertThat(video.acceptsImage()).isTrue();
+        assertThat(TestCatalogue.model("wan22-i2v-fastmove").needsImage()).isTrue();
+        assertThat(txt.acceptsImage()).isFalse();
         assertThat(video.needsMask()).isFalse();
         assertThat(txt.outputType()).isEqualTo("image/png");
         assertThat(video.outputType()).isEqualTo("video/mp4");
@@ -61,7 +64,7 @@ class ModelCatalogueTest {
         ParamDefinition width = param("muse-txt2img", "width");
         assertThat(List.of(width.min(), width.max(), width.step())).containsExactly(512, 2048, 16);
         assertThat(param("wan22-i2v-fastmove", "seconds").max()).isEqualTo(6);
-        assertThat(param("ltx25-i2v", "seconds").max()).isEqualTo(8);
+        assertThat(param("ltx25-i2v", "seconds").max()).isEqualTo(12);
     }
 
     @Test

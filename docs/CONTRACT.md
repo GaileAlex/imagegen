@@ -33,7 +33,7 @@ and the catalogue in `application.yml` (`imagegen.models`):
 | `muse-inpaint`       | INPAINT | image + mask  | image/png  | ~60 s                            |
 | `fluxedup-inpaint`   | INPAINT | image + mask  | image/png  | ~140-160 s                       |
 | `wan22-i2v-fastmove` | VIDEO   | image         | video/mp4  | 832x480 5 s ~160 s               |
-| `ltx25-i2v`          | VIDEO   | image         | video/mp4  | 1216x704 5 s with sound ~115 s   |
+| `ltx25-i2v`          | VIDEO   | image or -    | video/mp4  | 1216x704 5 s with sound ~115 s   |
 
 `wan22-i2v` (base Wan 2.2) stays in `workflows/` but is not in the catalogue (Fast Move replaces it).
 
@@ -46,6 +46,7 @@ Response:
   "title": "Muse (Krea 2)",
   "description": "...",
   "needsImage": false,
+  "acceptsImage": false,
   "needsMask": false,
   "outputType": "image/png",
   "typicalSeconds": 50,
@@ -68,8 +69,12 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
   (1168x880 for 4:3, 1024x1024 for a square), both sides rounded down to a multiple of 16.
 - VIDEO size is an `orientation` ENUM (`landscape` / `portrait`): Wan 832x480 / 480x832, LTX 1216x704 / 704x1216
   (the service sets the LTX stage-1 `halfWidth`/`halfHeight`).
-- VIDEO length is a client param in seconds (`seconds`: Wan 2-6, LTX 2-8), converted to frames: 16 * s + 1 for Wan (16 fps),
-  24 * s + 1 for LTX (24 fps); both satisfy the frame rules of the models (4n+1, 8n+1).
+- VIDEO length is a client param in seconds (`seconds`: Wan 2-6, LTX 2-12), converted to frames: 16 * s + 1 for Wan (16 fps),
+  24 * s + 1 for LTX (24 fps); both satisfy the frame rules of the models (4n+1, 8n+1). LTX 10 s ~195 s, 12 s ~255 s.
+- `needsImage` = the job is refused without an image; `acceptsImage` = an image may be given. LTX has
+  `needsImage: false, acceptsImage: true`: without an image the video is made from the text alone, the service adds
+  `"textOnly": true` to the params of the job (shown in the job JSON, not accepted from the client) and the workflow
+  skips its start image.
 
 ## Jobs
 
@@ -78,11 +83,11 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
 | Part      | Required                  | Content                                                          |
 |-----------|---------------------------|------------------------------------------------------------------|
 | `request` | yes                       | JSON `{"model": "muse-inpaint", "params": {...}, "sourceJobId": null}` |
-| `image`   | EDIT, INPAINT, VIDEO      | jpeg / png / webp, at most 20 MB                                 |
+| `image`   | EDIT, INPAINT, Wan        | jpeg / png / webp, at most 20 MB                                 |
 | `mask`    | INPAINT                   | png, white = area to redraw; resized to the image size           |
 
 `sourceJobId` = a DONE image job of the same user used as the input image instead of the `image` part (animate or
-edit a picture generated before, without downloading and uploading it).
+edit a picture generated before, without downloading and uploading it). For LTX both are optional.
 
 Answer `202`:
 

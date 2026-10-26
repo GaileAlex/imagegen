@@ -59,7 +59,8 @@ public class JobService {
         BufferedImage picture = null;
         BufferedImage maskPicture = null;
         Dimension size = null;
-        if (model.needsImage()) {
+        boolean imageGiven = request.sourceJobId() != null || (image != null && image.length > 0);
+        if (model.needsImage() || (model.acceptsImage() && imageGiven)) {
             picture = prepareImage(model, userId, request, image);
             if (model.kind() != JobKind.VIDEO) {
                 size = InputImages.editSize(picture.getWidth(), picture.getHeight());
@@ -74,7 +75,7 @@ public class JobService {
             }
             maskPicture = InputImages.mask(mask, picture.getWidth(), picture.getHeight());
         }
-        Job job = factory.create(id, userId, userName, model, request.params(), size);
+        Job job = factory.create(id, userId, userName, model, request.params(), size, picture != null);
 
         writeInputs(id, picture, maskPicture);
         try {

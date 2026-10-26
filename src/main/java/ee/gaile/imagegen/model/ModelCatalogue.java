@@ -54,11 +54,15 @@ public class ModelCatalogue {
             params.add(buildParam(config.id(), param, spec));
         }
         JobKind kind = config.kind();
-        boolean needsImage = kind != JobKind.IMAGE;
+        boolean acceptsImage = kind != JobKind.IMAGE;
+        if (config.imageOptional() && kind != JobKind.VIDEO) {
+            throw new IllegalStateException(config.id() + ": only a VIDEO mode can have an optional image");
+        }
+        boolean needsImage = acceptsImage && !config.imageOptional();
         boolean needsMask = kind == JobKind.INPAINT;
         String outputType = kind == JobKind.VIDEO ? "video/mp4" : "image/png";
-        return new ModelDefinition(config.id(), kind, config.title(), config.description(), needsImage, needsMask,
-                outputType, config.typicalSeconds(), List.copyOf(params));
+        return new ModelDefinition(config.id(), kind, config.title(), config.description(), needsImage, acceptsImage,
+                needsMask, outputType, config.typicalSeconds(), List.copyOf(params));
     }
 
     private ParamDefinition buildParam(String modelId, ParamConfig param, ParamSpec spec) {

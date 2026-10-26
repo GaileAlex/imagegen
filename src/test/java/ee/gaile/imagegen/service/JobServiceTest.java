@@ -185,6 +185,16 @@ class JobServiceTest {
     }
 
     @Test
+    void ltxRunsFromTheTextAloneButWanNeedsAnImage() {
+        Job job = service.submit(1, "a", request("ltx25-i2v", "{\"prompt\":\"walks\"}"), null, null).job();
+
+        assertThat(job.getParams()).containsEntry(JobFactory.TEXT_ONLY, true);
+        assertThat(files.input(job.getId())).doesNotExist();
+        assertThatThrownBy(() -> service.submit(1, "a", request("wan22-i2v-fastmove", "{\"prompt\":\"walks\"}"),
+                new byte[0], null)).isInstanceOf(InvalidParamsException.class).hasMessageContaining("image");
+    }
+
+    @Test
     void sourceJobIdTakesTheResultOfAnEarlierImageJob() throws IOException {
         UUID sourceId = UUID.randomUUID();
         Job source = new Job(sourceId, 1, "a", "muse-txt2img", JobKind.IMAGE, Map.of("seed", 1), 1, null);

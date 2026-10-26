@@ -26,6 +26,8 @@ import java.util.function.LongSupplier;
 public class JobFactory {
 
     public static final long MAX_SEED = Integer.MAX_VALUE;
+    /** Service param of a video made from the text alone: the workflow skips its start image */
+    public static final String TEXT_ONLY = "textOnly";
     private static final int MAX_TEXT_LENGTH = 4000;
     /** Float params are typed by hand, so a step of 0.1 is not checked to the last bit */
     private static final double EPSILON = 1e-9;
@@ -44,12 +46,27 @@ public class JobFactory {
     }
 
     /**
-     * @param photoSize size of the prepared photo, needed (and only used) for EDIT and INPAINT
-     * @throws InvalidParamsException an unknown param, a missing required one or a value out of its range
+     * A job with its input image, if the mode takes one.
      */
     public Job create(UUID id, long userId, String userName, ModelDefinition model, Map<String, Object> raw,
                       Dimension photoSize) {
+        return create(id, userId, userName, model, raw, photoSize, model.acceptsImage());
+    }
+
+    /**
+     * @param photoSize size of the prepared photo, needed (and only used) for EDIT and INPAINT
+     * @param withImage the job has an input image; a video without one is marked {@value #TEXT_ONLY}
+     * @throws InvalidParamsException an unknown param, a missing required one or a value out of its range
+     */
+    public Job create(UUID id, long userId, String userName, ModelDefinition model, Map<String, Object> raw,
+                      Dimension photoSize, boolean withImage) {
         Map<String, Object> params = validate(model, raw);
+        if (model.acceptsImage() && !withImage) {
+            if (model.needsImage()) {
+                throw new InvalidParamsException(model.id() + " needs an image");
+            }
+            params.put(TEXT_ONLY, true);
+        }
         if (model.kind() == JobKind.EDIT || model.kind() == JobKind.INPAINT) {
             if (photoSize == null) {
                 throw new InvalidParamsException("The photo is missing");

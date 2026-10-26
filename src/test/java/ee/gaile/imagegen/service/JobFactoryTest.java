@@ -107,10 +107,33 @@ class JobFactoryTest {
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 7)))
                 .isInstanceOf(InvalidParamsException.class);
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 9)))
+        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 13)))
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 1)))
                 .isInstanceOf(InvalidParamsException.class);
+    }
+
+    @Test
+    void ltxWithoutAnImageIsMarkedTextOnly() {
+        Job textOnly = factory.create(UUID.randomUUID(), 7, "alex", TestCatalogue.model("ltx25-i2v"),
+                params("prompt", "x"), null, false);
+        Job fromImage = create("ltx25-i2v", params("prompt", "x"));
+
+        assertThat(textOnly.getParams()).containsEntry(JobFactory.TEXT_ONLY, true);
+        assertThat(fromImage.getParams()).doesNotContainKey(JobFactory.TEXT_ONLY);
+    }
+
+    @Test
+    void wanStillNeedsAnImage() {
+        assertThatThrownBy(() -> factory.create(UUID.randomUUID(), 7, "alex",
+                TestCatalogue.model("wan22-i2v-fastmove"), params("prompt", "x"), null, false))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("needs an image");
+    }
+
+    @Test
+    void theClientCannotSetTextOnly() {
+        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", JobFactory.TEXT_ONLY, true)))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Unknown param");
     }
 
     @Test
@@ -119,7 +142,7 @@ class JobFactoryTest {
 
         assertThat(job.getParams()).containsEntry("steps", 8).containsEntry("cfg", 4.0)
                 .containsEntry("width", 512).containsEntry("height", 2048);
-        assertThat(create("ltx25-i2v", params("prompt", "x", "seconds", 8)).getParams()).containsEntry("seconds", 8);
+        assertThat(create("ltx25-i2v", params("prompt", "x", "seconds", 12)).getParams()).containsEntry("seconds", 12);
     }
 
     @Test
