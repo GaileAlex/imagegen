@@ -47,6 +47,12 @@ imagegen:
   job-timeout: 15m
   max-jobs-per-user: 3
   max-queue: 10
+  # Russian prompts go to the models in English. The CPU instance of Ollama of the CV project: the GPU belongs to
+  # ComfyUI; the model leaves memory with the unload of the GPU model
+  translator:
+    url: ${TRANSLATOR_URL:http://cv-ollama-cpu:11434}
+    model: huihui_ai/gemma-4-abliterated:e4b
+    timeout: 3m
   # The modes of docs/CONTRACT.md. Defaults of the params come from workflows/<id>.params.json unless stated here;
   # the other params of that file (filenamePrefix, sampler, halfWidth ...) are set by the service
   models:

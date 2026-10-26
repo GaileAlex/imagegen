@@ -2,6 +2,7 @@ package ee.gaile.imagegen.gpu;
 
 import ee.gaile.imagegen.gpu.UnloadPolicy.UnloadState;
 import ee.gaile.imagegen.job.FakeGateway;
+import ee.gaile.imagegen.job.FakeTranslator;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobQueue;
 import ee.gaile.imagegen.job.JobStatus;
@@ -26,7 +27,7 @@ class UnloadPolicyTest {
 
     @BeforeEach
     void setUp() {
-        queue = new JobQueue(gateway, job -> {
+        queue = new JobQueue(gateway, new FakeTranslator(), job -> {
         }, PROPERTIES, clock);
         queue.start();
         policy = new UnloadPolicy(queue, PROPERTIES, clock);

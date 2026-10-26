@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -26,6 +27,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class JobQueue {
 
     private final ComfyGateway gateway;
+    private final PromptTranslator translator;
     private final JobRepository repository;
     private final ImagegenProperties properties;
     private final Clock clock;
@@ -146,6 +148,7 @@ public class JobQueue {
                 return false;
             }
             loaded = false;
+            translator.unload();
             log.info("Model unloaded, {} after the last job", Duration.between(lastActivity, clock.instant()));
             return true;
         } finally {
@@ -204,7 +207,11 @@ public class JobQueue {
         JobResult result = null;
         String error = null;
         try {
-            result = gateway.run(job, job::setProgress, deadline);
+            translate(job);
+            // A cancel during the translation: ComfyUI never gets the job
+            if (!job.isCancelRequested()) {
+                result = gateway.run(job, job::setProgress, deadline);
+            }
         } catch (JobFailedException e) {
             error = e.getMessage();
         } catch (RuntimeException e) {
@@ -235,6 +242,19 @@ public class JobQueue {
         }
         log.info("Job {} {} in {}{}", job.getId(), job.getStatus(),
                 Duration.between(job.getStartedAt(), job.getFinishedAt()), error != null ? ": " + error : "");
+    }
+
+    /** On the CPU, so the GPU model of the previous job may stay loaded meanwhile */
+    private void translate(Job job) {
+        Map<String, String> texts = PromptTranslator.cyrillicTexts(job.getParams());
+        if (texts.isEmpty()) {
+            return;
+        }
+        job.setProgress(Progress.TRANSLATING);
+        job.setTranslations(Map.copyOf(translator.translate(texts)));
+        job.setProgress(Progress.LOADING);
+        repository.save(job);
+        log.info("Job {}: translated {}", job.getId(), job.getTranslations().keySet());
     }
 
     /**

@@ -22,13 +22,14 @@ public class JobQueueTest {
             Duration.ofMinutes(30), Duration.ofSeconds(150), Duration.ofDays(10), Duration.ofMinutes(15), 3, 10);
 
     private final FakeGateway gateway = new FakeGateway();
+    private final FakeTranslator translator = new FakeTranslator();
     private final List<JobStatus> saved = new CopyOnWriteArrayList<>();
     private final MutableClock clock = new MutableClock();
     private JobQueue queue;
 
     @BeforeEach
     void setUp() {
-        queue = new JobQueue(gateway, job -> saved.add(job.getStatus()), PROPERTIES, clock);
+        queue = new JobQueue(gateway, translator, job -> saved.add(job.getStatus()), PROPERTIES, clock);
         queue.start();
     }
 
@@ -144,6 +145,45 @@ public class JobQueueTest {
         assertThat(queue.state().loaded()).isTrue();
         assertThat(queue.unloadIfIdle()).isTrue();
         assertThat(gateway.frees).isEqualTo(1);
+        assertThat(translator.unloads).isEqualTo(1);
         assertThat(queue.state().loaded()).isFalse();
+    }
+
+    @Test
+    void translatesRussianTextsBeforeComfyUi() throws InterruptedException {
+        Job job = new Job(UUID.randomUUID(), 1, "user1", "a", JobKind.VIDEO,
+                Map.of("prompt", "рыжий кот", "negativePrompt", "色调艳丽", "seconds", 5), 1, null);
+
+        queue.submit(job);
+        assertThat(gateway.awaitRunning()).isSameAs(job);
+
+        assertThat(job.getTranslations()).isEqualTo(Map.of("prompt", "EN:рыжий кот"));
+        assertThat(job.getProgress()).isEqualTo(Progress.LOADING);
+        gateway.complete(job);
+        await().until(() -> job.getStatus() == JobStatus.DONE);
+    }
+
+    @Test
+    void englishTextsAreNotTranslated() throws InterruptedException {
+        Job job = new Job(UUID.randomUUID(), 1, "user1", "a", JobKind.IMAGE, Map.of("prompt", "a ginger cat"), 1, null);
+
+        queue.submit(job);
+        gateway.awaitRunning();
+
+        assertThat(translator.calls).isZero();
+        assertThat(job.getTranslations()).isEmpty();
+        gateway.complete(job);
+    }
+
+    @Test
+    void failedTranslationFailsTheJobWithoutComfyUi() {
+        translator.failing = true;
+        Job job = new Job(UUID.randomUUID(), 1, "user1", "a", JobKind.IMAGE, Map.of("prompt", "кот"), 1, null);
+
+        queue.submit(job);
+
+        await().until(() -> job.getStatus() == JobStatus.FAILED);
+        assertThat(job.getError()).isEqualTo("prompt translation failed");
+        assertThat(gateway.started).isEmpty();
     }
 }

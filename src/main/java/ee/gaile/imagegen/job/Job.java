@@ -31,6 +31,8 @@ public class Job {
     private volatile Instant finishedAt;
     private volatile String error;
     private volatile JobResult result;
+    /** Param name -> the English text that went to ComfyUI instead of the Russian one; empty when none was needed */
+    private volatile Map<String, String> translations = Map.of();
 
     /** Not stored: only meaningful while RUNNING */
     private volatile Progress progress;

@@ -41,6 +41,7 @@ public class WorkflowValues {
 
     public static Map<String, Object> of(Job job) {
         Map<String, Object> values = new HashMap<>(job.getParams());
+        values.putAll(job.getTranslations());
         values.put("filenamePrefix", job.getId().toString());
         if (job.getKind() != JobKind.IMAGE) {
             values.put("image", inputName(job));

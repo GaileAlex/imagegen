@@ -3,3 +3,5 @@ imagegen:
   data-dir: ./data
   # ComfyUI runs in Docker, its folders are not reachable from a local run
   comfyui-io-dir: ""
+  translator:
+    url: http://localhost:11435

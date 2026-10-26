@@ -13,12 +13,12 @@ import java.util.UUID;
  */
 record JobRecord(UUID jobId, long userId, String userName, String model, JobKind kind, JobStatus status,
                  Map<String, Object> params, long seed, Instant createdAt, Instant startedAt, Instant finishedAt,
-                 String error, JobResult result) {
+                 String error, JobResult result, Map<String, String> translations) {
 
     static JobRecord of(Job job) {
         return new JobRecord(job.getId(), job.getUserId(), job.getUserName(), job.getModel(), job.getKind(),
                 job.getStatus(), job.getParams(), job.getSeed(), job.getCreatedAt(), job.getStartedAt(),
-                job.getFinishedAt(), job.getError(), job.getResult());
+                job.getFinishedAt(), job.getError(), job.getResult(), job.getTranslations());
     }
 
     Job toJob() {
@@ -28,6 +28,8 @@ record JobRecord(UUID jobId, long userId, String userName, String model, JobKind
         job.setFinishedAt(finishedAt);
         job.setError(error);
         job.setResult(result);
+        // Records written before the translation have none
+        job.setTranslations(translations != null ? translations : Map.of());
         return job;
     }
 }

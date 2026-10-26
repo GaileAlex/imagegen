@@ -30,6 +30,14 @@ class WorkflowValuesTest {
     }
 
     @Test
+    void theTranslationReplacesTheRussianText() {
+        Job job = job("muse-txt2img", JobKind.IMAGE, "prompt", "рыжий кот");
+        job.setTranslations(Map.of("prompt", "a ginger cat"));
+
+        assertThat(WorkflowValues.of(job)).containsEntry("prompt", "a ginger cat");
+    }
+
+    @Test
     void editAndInpaintNameTheUploadedFiles() {
         Map<String, Object> edit = WorkflowValues.of(job("muse-edit", JobKind.EDIT, "width", 1168, "height", 880));
         Map<String, Object> inpaint = WorkflowValues.of(job("muse-inpaint", JobKind.INPAINT));

@@ -109,6 +109,7 @@ Errors (body `{"error": "<code>", "message": "..."}`):
   "position": 0,
   "progress": {"phase": "SAMPLING", "value": 7, "max": 16},
   "params": {"prompt": "...", "steps": 16, "seed": 123456789},
+  "translations": {"prompt": "..."},
   "seed": 123456789,
   "createdAt": "2026-10-26T12:00:00Z",
   "startedAt": "2026-10-26T12:00:03Z",
@@ -120,10 +121,15 @@ Errors (body `{"error": "<code>", "message": "..."}`):
 ```
 
 - `status`: `QUEUED`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED`
-- `progress.phase`: `LOADING` (running, no sampler step reported yet: models load), `SAMPLING` (value/max of the
+- `progress.phase`: `TRANSLATING` (the Russian texts are translated into English), `LOADING` (running, no sampler
+  step reported yet: models load), `SAMPLING` (value/max of the
   current sampler; video and LTX have two samplers, the bar restarts), `DECODING` (after the last step)
 - `result` when DONE: `{"contentType": "image/png", "size": 1834221, "width": 1024, "height": 1024}`
   (`durationSeconds` for video)
+- `translations`: param name -> the English text the model got instead of the typed one. Every text param with
+  Cyrillic in it (`prompt`, `negativePrompt`) is translated by a local uncensored model (Ollama on the CPU, see
+  `imagegen.translator`) when the job starts; `{}` when nothing needed it. A failed translation fails the job with
+  `"prompt translation failed"`. The translation model is unloaded together with the GPU model.
 - `expiresAt` = `finishedAt` + 10 days
 
 ### `GET /api/jobs?limit=50`
