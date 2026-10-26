@@ -29,7 +29,8 @@ public class WorkflowValues {
     /** Both models take frames = fps * seconds + 1 (4n+1 for Wan, 8n+1 for LTX) */
     private static final Map<String, VideoProfile> VIDEO = Map.of(
             "wan22-i2v-fastmove", new VideoProfile(16, 832, 480, false),
-            "ltx25-i2v", new VideoProfile(24, 1216, 704, true));
+            "ltx25-i2v", new VideoProfile(24, 1216, 704, true),
+            "ltx25-nsfw-i2v", new VideoProfile(24, 1216, 704, true));
 
     public static String inputName(Job job) {
         return job.getId() + ".input.png";

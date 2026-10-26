@@ -1,0 +1,67 @@
+{
+  "description": "LTX-2.5 uncensored v1.1 Q4_K_M GGUF (ChrisColeTech on Hugging Face: Eros10 NSFW, DMD distill, IC and I2V LoRAs merged in) in the graph of ltx25-i2v; 8 steps, CFG 1 as its author recommends. Compared 2026-10-26 in test-results/nsfw-cmp: the best prompt following on nude scenes, the stock LTX blurs and dodges them",
+  "output": "31",
+  "timing": "1216x704 121 frames: 188 s I2V, 145 s T2V (with the load)",
+  "params": {
+    "image": {
+      "targets": [
+        "6.image"
+      ],
+      "default": "start.png"
+    },
+    "textOnly": {
+      "targets": [
+        "12.bypass",
+        "22.bypass"
+      ],
+      "default": false,
+      "note": "set by the service when no start image is given: both image nodes pass the latent through (text to video)"
+    },
+    "prompt": {
+      "targets": [
+        "8.text"
+      ],
+      "default": "",
+      "note": "motion, camera and sound (\"a soft meow\", ambience)"
+    },
+    "negativePrompt": {
+      "targets": [
+        "9.text"
+      ],
+      "default": "pc game, console game, video game, cartoon, childish, ugly"
+    },
+    "seed": {
+      "targets": [
+        "16.noise_seed"
+      ],
+      "default": 0
+    },
+    "halfWidth": {
+      "targets": [
+        "11.width"
+      ],
+      "default": 608,
+      "note": "stage 1 size = half of the final, multiple of 32 (final 1216x704)"
+    },
+    "halfHeight": {
+      "targets": [
+        "11.height"
+      ],
+      "default": 352
+    },
+    "frames": {
+      "targets": [
+        "11.length",
+        "13.frames_number"
+      ],
+      "default": 121,
+      "note": "24 fps: 121 = 5 s; 8n+1"
+    },
+    "filenamePrefix": {
+      "targets": [
+        "31.filename_prefix"
+      ],
+      "default": "ltx"
+    }
+  }
+}

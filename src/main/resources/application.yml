@@ -135,3 +135,15 @@ imagegen:
         - { name: seconds, type: INT, default: '5', min: 2, max: 12 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
         - { name: seed, type: SEED }
+    - id: ltx25-nsfw-i2v
+      kind: VIDEO
+      title: LTX 2.5 NSFW
+      description: LTX 2.5 with NSFW fine-tunes merged in, for nude and explicit scenes (the plain LTX blurs and dodges them). Sound, 1216x704 (24 fps); from a text or a start image.
+      typical-seconds: 150
+      image-optional: true
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: negativePrompt, type: TEXT }
+        - { name: seconds, type: INT, default: '5', min: 2, max: 12 }
+        - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
+        - { name: seed, type: SEED }

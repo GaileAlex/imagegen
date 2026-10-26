@@ -34,6 +34,7 @@ and the catalogue in `application.yml` (`imagegen.models`):
 | `fluxedup-inpaint`   | INPAINT | image + mask  | image/png  | ~140-160 s                       |
 | `wan22-i2v-fastmove` | VIDEO   | image         | video/mp4  | 832x480 5 s ~160 s               |
 | `ltx25-i2v`          | VIDEO   | image or -    | video/mp4  | 1216x704 5 s with sound ~115 s   |
+| `ltx25-nsfw-i2v`     | VIDEO   | image or -    | video/mp4  | the same, ~150 s                 |
 
 `wan22-i2v` (base Wan 2.2) stays in `workflows/` but is not in the catalogue (Fast Move replaces it).
 
