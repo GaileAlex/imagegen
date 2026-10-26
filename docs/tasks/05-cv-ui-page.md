@@ -2,7 +2,7 @@
 
 Project: `D:\WorkDisk\JAVA\CV-gaile.ee\CV\frontend` (Angular, standalone components, routes in `app.routes.ts`,
 texts in `src/assets/i18n/{en,et,ru}.json`). Same branch `image-generation` as task 4 (after task 4 is reviewed).
-Read first: `..\imagegen\docs\CONTRACT.md`, memories `image-generation-plan.md`, `local-ui-check.md`,
+Read first: `..\imagegen\docs\CONTRACT.md`, memories `image-generation-plan.md` (STEP 2-4), `local-ui-check.md`,
 `admin-panel-menu.md`, `estonian-holidays-page.md` (menu "More" group and the width budget), `prerender-setup.md`.
 
 ## Route and access
@@ -45,7 +45,10 @@ Layout: settings on the left, result on the right (stacked on a phone, 16 px sid
    12:40" / "Model not loaded, the first generation takes longer" / queue length; button "Unload now" (`POST unload`,
    shows "will unload after the queue" for PENDING).
 9. **Presence**: `POST presence/heartbeat` at once and every 60 s while the page is open; on route leave
-   (`ngOnDestroy`) `POST presence/leave`; on `pagehide` `navigator.sendBeacon('/api/image-generation/presence/leave')`.
+   (`ngOnDestroy`) `POST presence/leave`; on `pagehide` the same POST with `fetch(url, {method: "POST", keepalive: true,
+   headers: {Authorization: ...}})`. NOT `navigator.sendBeacon`: it cannot send the Authorization header, and this
+   app authenticates by the access token in that header only (the refresh cookie is SameSite=Strict, /auth/** only).
+   Use the same token source as the HTTP interceptor of the app.
    Guard all browser-only code for SSR (`isPlatformBrowser`).
 
 ## Rules
