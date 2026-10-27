@@ -70,18 +70,6 @@ imagegen:
         - { name: width, type: INT, min: 512, max: 2048, step: 16 }
         - { name: height, type: INT, min: 512, max: 2048, step: 16 }
         - { name: seed, type: SEED }
-    - id: fluxedup-txt2img
-      kind: IMAGE
-      title: fluxedUp (Flux.1 Dev)
-      description: Text to image in the photo style. Slow with the author's sampler (35 steps), may undress people unasked.
-      typical-seconds: 160
-      params:
-        - { name: prompt, type: TEXT, required: true }
-        - { name: steps, type: INT, min: 20, max: 50 }
-        - { name: guidance, type: FLOAT, min: 2.0, max: 6.0, step: 0.1 }
-        - { name: width, type: INT, min: 512, max: 2048, step: 16 }
-        - { name: height, type: INT, min: 512, max: 2048, step: 16 }
-        - { name: seed, type: SEED }
     - id: muse-edit
       kind: EDIT
       title: Muse edit by instruction
@@ -101,16 +89,6 @@ imagegen:
         - { name: prompt, type: TEXT, required: true }
         - { name: steps, type: INT, min: 8, max: 40 }
         - { name: cfg, type: FLOAT, min: 1.0, max: 4.0, step: 0.1 }
-        - { name: seed, type: SEED }
-    - id: fluxedup-inpaint
-      kind: INPAINT
-      title: fluxedUp inpaint
-      description: Redraws the masked area in the photo style. The most photo-real result, but hit or miss per seed.
-      typical-seconds: 150
-      params:
-        - { name: prompt, type: TEXT, required: true }
-        - { name: steps, type: INT, min: 20, max: 50 }
-        - { name: guidance, type: FLOAT, min: 2.0, max: 6.0, step: 0.1 }
         - { name: seed, type: SEED }
     - id: wan22-i2v-fastmove
       kind: VIDEO

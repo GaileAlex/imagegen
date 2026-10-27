@@ -17,9 +17,9 @@ class ModelCatalogueTest {
     }
 
     @Test
-    void listsTheNineModesInTheOrderOfTheContract() {
+    void listsTheSevenModesInTheOrderOfTheContract() {
         assertThat(catalogue.list()).extracting(ModelDefinition::id).containsExactly("muse-txt2img",
-                "fluxedup-txt2img", "muse-edit", "muse-inpaint", "fluxedup-inpaint", "wan22-i2v-fastmove",
+                "muse-edit", "muse-inpaint", "wan22-i2v-fastmove",
                 "wan22-i2v", "ltx25-i2v", "ltx25-nsfw-i2v");
     }
 
@@ -49,8 +49,6 @@ class ModelCatalogueTest {
         assertThat(param("muse-txt2img", "width").defaultValue()).isEqualTo(1024);
         assertThat(param("muse-edit", "steps").defaultValue()).isEqualTo(10);
         assertThat(param("muse-edit", "cfg").defaultValue()).isEqualTo(1.0);
-        assertThat(param("fluxedup-txt2img", "steps").defaultValue()).isEqualTo(35);
-        assertThat(param("fluxedup-txt2img", "guidance").defaultValue()).isEqualTo(4.0);
     }
 
     @Test
@@ -59,8 +57,6 @@ class ModelCatalogueTest {
         assertThat(steps.min()).isEqualTo(8);
         assertThat(steps.max()).isEqualTo(40);
         assertThat(param("muse-txt2img", "cfg").max()).isEqualTo(4.0);
-        assertThat(param("fluxedup-txt2img", "steps").min()).isEqualTo(20);
-        assertThat(param("fluxedup-txt2img", "guidance").min()).isEqualTo(2.0);
         ParamDefinition width = param("muse-txt2img", "width");
         assertThat(List.of(width.min(), width.max(), width.step())).containsExactly(512, 2048, 16);
         assertThat(param("wan22-i2v-fastmove", "seconds").max()).isEqualTo(6);
@@ -78,7 +74,7 @@ class ModelCatalogueTest {
 
     @Test
     void editAndInpaintTakeTheirSizeFromThePhoto() {
-        for (String id : List.of("muse-edit", "muse-inpaint", "fluxedup-inpaint")) {
+        for (String id : List.of("muse-edit", "muse-inpaint")) {
             assertThat(TestCatalogue.model(id).params()).extracting(ParamDefinition::name)
                     .doesNotContain("width", "height");
         }

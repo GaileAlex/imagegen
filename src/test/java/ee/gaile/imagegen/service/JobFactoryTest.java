@@ -101,10 +101,6 @@ class JobFactoryTest {
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("muse-txt2img", params("prompt", "x", "cfg", 0.5)))
                 .isInstanceOf(InvalidParamsException.class);
-        assertThatThrownBy(() -> create("fluxedup-txt2img", params("prompt", "x", "steps", 19)))
-                .isInstanceOf(InvalidParamsException.class);
-        assertThatThrownBy(() -> create("fluxedup-txt2img", params("prompt", "x", "guidance", 6.5)))
-                .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 7)))
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 13)))
@@ -199,12 +195,12 @@ class JobFactoryTest {
     @Test
     void editAndInpaintTakeTheSizeOfThePhoto() {
         Job edit = create("muse-edit", params("prompt", "add a cat"));
-        Job inpaint = create("fluxedup-inpaint", params("prompt", "a cat"));
+        Job inpaint = create("muse-inpaint", params("prompt", "a cat"));
 
         assertThat(edit.getParams()).containsEntry("width", 1168).containsEntry("height", 880)
                 .containsEntry("steps", 10).containsEntry("cfg", 1.0);
         assertThat(inpaint.getParams()).containsEntry("width", 1168).containsEntry("height", 880)
-                .containsEntry("guidance", 4.0).containsEntry("steps", 35);
+                .containsEntry("steps", 16).containsEntry("cfg", 2.5);
     }
 
     @Test

@@ -28,10 +28,8 @@ and the catalogue in `application.yml` (`imagegen.models`):
 | id                   | kind    | input         | output     | typical time (RTX 5060 Ti, warm) |
 |----------------------|---------|---------------|------------|----------------------------------|
 | `muse-txt2img`       | IMAGE   | -             | image/png  | 1024x1024 16 steps ~50 s         |
-| `fluxedup-txt2img`   | IMAGE   | -             | image/png  | 1024x1024 35 steps ~150-170 s    |
 | `muse-edit`          | EDIT    | image         | image/png  | ~60 s                            |
 | `muse-inpaint`       | INPAINT | image + mask  | image/png  | ~60 s                            |
-| `fluxedup-inpaint`   | INPAINT | image + mask  | image/png  | ~140-160 s                       |
 | `wan22-i2v-fastmove` | VIDEO   | image         | video/mp4  | 832x480 5 s ~160 s               |
 | `wan22-i2v`          | VIDEO   | image         | video/mp4  | 832x480 5 s ~145 s               |
 | `ltx25-i2v`          | VIDEO   | image or -    | video/mp4  | 1216x704 5 s with sound ~115 s   |
