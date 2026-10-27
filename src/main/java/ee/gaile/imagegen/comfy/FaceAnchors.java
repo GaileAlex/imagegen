@@ -20,6 +20,11 @@ public class FaceAnchors {
 
     /** LTX: one guide frame about every this many seconds, the last one on the last frame */
     static final double LTX_GUIDE_SECONDS = 2.7;
+    /**
+     * Weight of each guide frame: at 1.0 the head jumps back to the photo at every guide (a turn of the head breaks
+     * into twitches), at 0.3 the face and the room drift away; 0.5 keeps both the face and the motion (test 2026-10-27)
+     */
+    static final double LTX_GUIDE_STRENGTH = 0.5;
     private static final int LTX_FPS = 24;
     /** LTX compresses 8 frames into one latent frame: guides go on its boundaries */
     private static final int LTX_FRAME_STEP = 8;
@@ -96,7 +101,7 @@ public class FaceAnchors {
             inputs.set("latent", links[2]);
             inputs.set("image", link("7", 0));
             inputs.put("frame_idx", frame);
-            inputs.put("strength", 1.0);
+            inputs.put("strength", LTX_GUIDE_STRENGTH);
             links = new ArrayNode[]{link(id, 0), link(id, 1), link(id, 2)};
         }
         return links;

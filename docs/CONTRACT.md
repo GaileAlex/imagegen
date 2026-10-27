@@ -83,7 +83,8 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
 - VIDEO `keepFace` (BOOL, default true) keeps the face of the start image: the image is given to the model again later
   in the clip, so the face does not drift away (`keepFace` of `<id>.params.json` names how, see `FaceAnchor`). Wan:
   the start image is also the last frame (WanFirstLastFrameToVideo). LTX: the start image is a guide frame about every
-  2.7 s and on the last frame, on both stages (LTXVAddGuide, then LTXVCropGuides); 8 s took 308 s instead of 182 s.
+  2.7 s and on the last frame, on both stages (LTXVAddGuide at strength 0.5, then LTXVCropGuides); 8 s took 308 s
+  instead of 182 s. Strength 1.0 made a turning head jump back to the photo at every guide, 0.3 let the face drift.
   The person comes back to the pose of the picture there and the motion gets calmer, so it is a bad fit for a scene
   where someone leaves the frame. Ignored for a video from the text alone.
 
