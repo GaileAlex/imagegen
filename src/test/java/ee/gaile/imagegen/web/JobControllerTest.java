@@ -24,7 +24,6 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import ee.gaile.imagegen.job.TooManyJobsException;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -144,17 +143,13 @@ class JobControllerTest {
     void submitErrorsUseTheCodesOfTheContract() throws Exception {
         given(service.submit(eq(1L), any(), any(), any(), any()))
                 .willThrow(new InvalidParamsException("steps must be between 8 and 40"));
-        given(service.submit(eq(2L), any(), any(), any(), any())).willThrow(new TooManyJobsException("full"));
-        given(service.submit(eq(3L), any(), any(), any(), any())).willThrow(new ComfyUnavailableException("down"));
+        given(service.submit(eq(2L), any(), any(), any(), any())).willThrow(new ComfyUnavailableException("down"));
 
         mockMvc.perform(MockMvcRequestBuilders.multipart("/api/jobs").file(request("{}")).header("X-User-Id", "1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("invalid_params"))
                 .andExpect(jsonPath("$.message").value("steps must be between 8 and 40"));
         mockMvc.perform(MockMvcRequestBuilders.multipart("/api/jobs").file(request("{}")).header("X-User-Id", "2"))
-                .andExpect(status().isTooManyRequests())
-                .andExpect(jsonPath("$.error").value("too_many_jobs"));
-        mockMvc.perform(MockMvcRequestBuilders.multipart("/api/jobs").file(request("{}")).header("X-User-Id", "3"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.error").value("comfyui_unavailable"));
     }

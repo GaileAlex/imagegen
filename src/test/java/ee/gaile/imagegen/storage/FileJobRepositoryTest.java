@@ -25,7 +25,7 @@ class FileJobRepositoryTest {
 
     private final MutableClock clock = new MutableClock();
     private final ImagegenProperties properties = new ImagegenProperties("http://comfyui", null, Duration.ofMinutes(30),
-            Duration.ofSeconds(150), Duration.ofDays(10), Duration.ofMinutes(15), 3, 10);
+            Duration.ofSeconds(150), Duration.ofDays(10), Duration.ofMinutes(15));
     @TempDir
     Path directory;
     private JobFiles files;

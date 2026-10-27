@@ -13,13 +13,12 @@ import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 public class JobQueueTest {
 
     public static final ImagegenProperties PROPERTIES = new ImagegenProperties("http://comfyui", Path.of("data"),
-            Duration.ofMinutes(30), Duration.ofSeconds(150), Duration.ofDays(10), Duration.ofMinutes(15), 3, 10);
+            Duration.ofMinutes(30), Duration.ofSeconds(150), Duration.ofDays(10), Duration.ofMinutes(15));
 
     private final FakeGateway gateway = new FakeGateway();
     private final FakeTranslator translator = new FakeTranslator();
@@ -112,20 +111,17 @@ public class JobQueueTest {
     }
 
     @Test
-    void limitsJobsPerUserAndInTotal() throws InterruptedException {
-        queue.submit(job(1, "a"));
+    void takesAnyNumberOfJobsAndTheNextUserWaitsForOneJobOnly() throws InterruptedException {
+        queue.submit(job(1, "a0"));
         gateway.awaitRunning();
-        queue.submit(job(1, "b"));
-        queue.submit(job(1, "c"));
-
-        assertThatThrownBy(() -> queue.submit(job(1, "d"))).isInstanceOf(TooManyJobsException.class);
-
-        for (long user = 2; user <= 8; user++) {
-            queue.submit(job(user, "x"));
+        for (int i = 1; i < 100; i++) {
+            queue.submit(job(1, "a" + i));
         }
-        assertThatThrownBy(() -> queue.submit(job(9, "y")))
-                .isInstanceOf(TooManyJobsException.class)
-                .hasMessageContaining("full");
+        Job other = job(2, "b");
+
+        assertThat(queue.submit(other)).isEqualTo(100);
+        assertThat(queue.position(other)).isEqualTo(1);
+        assertThat(queue.state().pending()).isEqualTo(101);
     }
 
     @Test

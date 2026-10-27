@@ -64,19 +64,14 @@ public class JobQueue {
     }
 
     /**
+     * No limit on the jobs: the users take turns, so a long row of one user does not hold the others up.
+     *
      * @return the jobs ahead of this one, the running one included (0 = it starts now)
-     * @throws TooManyJobsException when the user or the whole queue has too many jobs pending
      */
     public int submit(Job job) {
         lock.lock();
         try {
             int pending = queued.size() + (running != null ? 1 : 0);
-            if (pending >= properties.maxQueue()) {
-                throw new TooManyJobsException("The queue is full: " + pending + " jobs");
-            }
-            if (pendingOf(job.getUserId()) >= properties.maxJobsPerUser()) {
-                throw new TooManyJobsException("At most " + properties.maxJobsPerUser() + " jobs at a time");
-            }
             repository.save(job);
             queued.addLast(job);
             jobQueued.signal();
@@ -168,16 +163,6 @@ public class JobQueue {
         } finally {
             lock.unlock();
         }
-    }
-
-    private int pendingOf(long userId) {
-        int count = running != null && running.getUserId() == userId ? 1 : 0;
-        for (Job job : queued) {
-            if (job.getUserId() == userId) {
-                count++;
-            }
-        }
-        return count;
     }
 
     /**

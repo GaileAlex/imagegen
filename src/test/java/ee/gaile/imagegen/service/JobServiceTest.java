@@ -9,7 +9,6 @@ import ee.gaile.imagegen.job.JobQueue;
 import ee.gaile.imagegen.job.JobResult;
 import ee.gaile.imagegen.job.JobStatus;
 import ee.gaile.imagegen.job.MutableClock;
-import ee.gaile.imagegen.job.TooManyJobsException;
 import ee.gaile.imagegen.model.TestCatalogue;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.storage.JobStore;
@@ -274,11 +273,11 @@ class JobServiceTest {
     }
 
     @Test
-    void aFullQueueRemovesTheFilesOfTheRefusedJob() throws IOException {
-        given(queue.submit(any())).willThrow(new TooManyJobsException("full"));
+    void aRefusedJobLeavesNoFiles() throws IOException {
+        given(queue.submit(any())).willThrow(new IllegalStateException("refused"));
 
         assertThatThrownBy(() -> service.submit(1, "a", request("muse-edit", "{\"prompt\":\"cat\"}"), png(400, 300),
-                null)).isInstanceOf(TooManyJobsException.class);
+                null)).isInstanceOf(IllegalStateException.class);
 
         assertThat(fileCount()).isZero();
     }

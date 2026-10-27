@@ -119,7 +119,6 @@ ago, the jobs of one user keep their order. So `position` may grow when another 
 
 Errors (body `{"error": "<code>", "message": "..."}`):
 - `400 invalid_params` - unknown model, a param out of range, missing image/mask, unreadable image
-- `429 too_many_jobs` - the user has 20 jobs QUEUED or RUNNING, or the whole queue has 50
 - `503 comfyui_unavailable` - ComfyUI does not answer `/system_stats`
 
 ### `GET /api/jobs/{id}`

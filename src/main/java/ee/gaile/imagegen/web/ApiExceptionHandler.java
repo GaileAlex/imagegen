@@ -3,7 +3,6 @@ package ee.gaile.imagegen.web;
 import ee.gaile.imagegen.web.dto.ErrorBody;
 import ee.gaile.imagegen.service.ComfyUnavailableException;
 import ee.gaile.imagegen.service.InvalidParamsException;
-import ee.gaile.imagegen.job.TooManyJobsException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -50,11 +49,6 @@ public class ApiExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorBody> tooLarge(MaxUploadSizeExceededException e) {
         return body(HttpStatus.BAD_REQUEST, "invalid_params", "A file is larger than 20 MB");
-    }
-
-    @ExceptionHandler(TooManyJobsException.class)
-    public ResponseEntity<ErrorBody> tooManyJobs(TooManyJobsException e) {
-        return body(HttpStatus.TOO_MANY_REQUESTS, "too_many_jobs", e.getMessage());
     }
 
     @ExceptionHandler(ComfyUnavailableException.class)
