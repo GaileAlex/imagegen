@@ -25,7 +25,7 @@
     "class_type": "ModelSamplingFlux",
     "inputs": {
       "model": [
-        "15",
+        "1",
         0
       ],
       "max_shift": 1.21,
@@ -145,17 +145,6 @@
         0
       ],
       "filename_prefix": "fluxedup"
-    }
-  },
-  "15": {
-    "class_type": "LoraLoaderModelOnly",
-    "inputs": {
-      "model": [
-        "1",
-        0
-      ],
-      "lora_name": "SameFace_Fix.safetensors",
-      "strength_model": -2.0
     }
   }
 }

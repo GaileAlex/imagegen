@@ -140,15 +140,13 @@ public class ComfyUiGateway implements ComfyGateway {
             if (spec == null) {
                 continue;
             }
-            Object given = spec.factor() != null && value.getValue() instanceof Number number
-                    ? number.doubleValue() * spec.factor() : value.getValue();
             for (String target : spec.targets()) {
                 int dot = target.indexOf('.');
                 JsonNode node = graph.get(target.substring(0, dot));
                 if (node == null || !(node.get("inputs") instanceof ObjectNode inputs)) {
                     throw new IllegalStateException("Workflow " + template.id() + " has no target " + target);
                 }
-                inputs.set(target.substring(dot + 1), mapper.valueToTree(given));
+                inputs.set(target.substring(dot + 1), mapper.valueToTree(value.getValue()));
             }
         }
         // a video from the text alone has no face to keep

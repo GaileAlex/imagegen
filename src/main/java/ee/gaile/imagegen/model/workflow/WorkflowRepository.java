@@ -38,9 +38,7 @@ public class WorkflowRepository {
                 List<String> targets = new ArrayList<>();
                 entry.getValue().path("targets").forEach(target -> targets.add(target.asString()));
                 JsonNode defaultValue = entry.getValue().get("default");
-                JsonNode factor = entry.getValue().get("factor");
-                params.put(entry.getKey(), new ParamSpec(List.copyOf(targets), defaultValue,
-                        factor != null ? factor.asDouble() : null));
+                params.put(entry.getKey(), new ParamSpec(List.copyOf(targets), defaultValue));
             }
             String output = description.path("output").asString();
             if (!graph.has(output)) {

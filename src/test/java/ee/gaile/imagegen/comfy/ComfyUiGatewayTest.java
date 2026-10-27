@@ -127,18 +127,6 @@ class ComfyUiGatewayTest {
     }
 
     @Test
-    void faceVarietyBecomesTheNegativeWeightOfTheSameFaceLora() {
-        Job job = job("fluxedup-txt2img", params("prompt", "a woman", "faceVariety", 0.7, "seed", 1), null);
-        var template = new WorkflowRepository(MAPPER).get("fluxedup-txt2img");
-
-        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
-
-        assertThat(graph.at("/15/inputs/strength_model").asDouble()).isEqualTo(-0.7);
-        assertThat(graph.at("/15/inputs/lora_name").asString()).isEqualTo("SameFace_Fix.safetensors");
-        assertThat(graph.at("/4/inputs/model/0").asString()).isEqualTo("15");
-    }
-
-    @Test
     void ltxGetsFramesAndHalfSizeInTheirNodes() {
         Job job = job("ltx25-i2v", params("prompt", "walks", "seconds", 2, "orientation", "portrait", "seed", 1),
                 null);

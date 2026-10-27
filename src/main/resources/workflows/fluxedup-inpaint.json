@@ -139,17 +139,6 @@
       "filename_prefix": "fluxedup-inpaint"
     }
   },
-  "15": {
-    "class_type": "LoraLoaderModelOnly",
-    "inputs": {
-      "model": [
-        "1",
-        0
-      ],
-      "lora_name": "SameFace_Fix.safetensors",
-      "strength_model": -2.0
-    }
-  },
   "20": {
     "class_type": "LoadImage",
     "inputs": {
@@ -213,7 +202,7 @@
     "class_type": "DifferentialDiffusion",
     "inputs": {
       "model": [
-        "15",
+        "1",
         0
       ]
     }
