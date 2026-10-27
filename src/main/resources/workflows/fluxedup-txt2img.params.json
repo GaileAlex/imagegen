@@ -58,6 +58,14 @@
       ],
       "default": 1024
     },
+    "faceVariety": {
+      "targets": [
+        "15.strength_model"
+      ],
+      "default": 2.0,
+      "factor": -1,
+      "note": "SameFace Fix LoRA (Civitai 766608, VadimFedenko) at a NEGATIVE weight: trained on the typical Flux faces of women, so it pushes the model away from them; the page shows 0..2.5, factor -1 makes the weight; 0 = the model as it was. On fluxedUp the author's -0.6..-0.9 barely change the face; 2026-10-27 test (same seeds): -1.5 starts to change it, -2.0 gives other people without artefacts"
+    },
     "filenamePrefix": {
       "targets": [
         "14.filename_prefix"
