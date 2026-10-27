@@ -1,7 +1,7 @@
 {
-  "description": "Muse (Krea 2 fine-tune) text to image, same graph as SwarmUI 0.9.8.4 builds; same seed = same picture",
+  "description": "Muse v4.0 (Krea 2 fine-tune) text to image, same graph as SwarmUI 0.9.8.4 builds; same seed = same picture",
   "output": "9",
-  "timing": "RTX 5060 Ti: 1024x1024 20 steps ~63 s warm, 67 s after /free; 1216x704 16 steps 44 s",
+  "timing": "RTX 5060 Ti: 1248x720 16 steps ~44 s warm (v3.5 and v4.0 alike)",
   "params": {
     "prompt": {
       "targets": [
@@ -34,8 +34,8 @@
       "targets": [
         "10.cfg"
       ],
-      "default": 2.5,
-      "note": "author: 1-2.5, above 3 the image breaks"
+      "default": 2.0,
+      "note": "author of v4.0: 2.0 with er_sde + beta; above 3 the image breaks"
     },
     "width": {
       "targets": [

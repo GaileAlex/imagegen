@@ -1,0 +1,45 @@
+{
+  "description": "CyberRealistic v9 (Z-Image Turbo fine-tune, Q8_0 GGUF) text to image, the Comfy-Org Z-Image Turbo graph; same seed = same picture",
+  "output": "10",
+  "timing": "RTX 5060 Ti: 1248x720 9 steps ~14 s warm",
+  "params": {
+    "prompt": {
+      "targets": [
+        "5.text"
+      ],
+      "default": ""
+    },
+    "seed": {
+      "targets": [
+        "8.seed"
+      ],
+      "default": 0
+    },
+    "steps": {
+      "targets": [
+        "8.steps"
+      ],
+      "default": 9,
+      "note": "Z-Image Turbo: 8-10 steps, CFG 1"
+    },
+    "width": {
+      "targets": [
+        "7.width"
+      ],
+      "default": 1024,
+      "note": "multiple of 16, 1024-2048"
+    },
+    "height": {
+      "targets": [
+        "7.height"
+      ],
+      "default": 1024
+    },
+    "filenamePrefix": {
+      "targets": [
+        "10.filename_prefix"
+      ],
+      "default": "cyberrealistic"
+    }
+  }
+}

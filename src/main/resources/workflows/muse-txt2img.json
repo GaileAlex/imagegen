@@ -2,7 +2,7 @@
   "4": {
     "class_type": "UNETLoader",
     "inputs": {
-      "unet_name": "museByStableYogi_v35Int8Extended.safetensors",
+      "unet_name": "museByStableYogi_v40INT8Extended.safetensors",
       "weight_dtype": "default"
     }
   },
@@ -88,9 +88,9 @@
       ],
       "noise_seed": 0,
       "steps": 16,
-      "cfg": 2.5,
-      "sampler_name": "euler",
-      "scheduler": "simple",
+      "cfg": 2.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
       "positive": [
         "6",
         0

@@ -59,14 +59,47 @@ imagegen:
   models:
     - id: muse-txt2img
       kind: IMAGE
-      title: Muse (Krea 2)
-      description: Text to image. Muse is a Krea 2 fine-tune, the best all-rounder; 8-20 steps, CFG 1-2.5 (above 3 the image breaks).
+      title: Muse 4 (Krea 2)
+      description: Best for people. Keeps the age and the details of the prompt, natural poses, correct hands; uncensored. The slowest one; 8-20 steps, CFG 1-2.5 (above 3 the image breaks).
       typical-seconds: 50
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT, default: '' }
         - { name: steps, type: INT, min: 8, max: 40 }
         - { name: cfg, type: FLOAT, min: 1.0, max: 4.0, step: 0.1 }
+        - { name: width, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: height, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: seed, type: SEED }
+    - id: krea2-realism-txt2img
+      kind: IMAGE
+      title: Krea2 Realism (fast)
+      description: Fast. Landscapes, streets, signs with text, food, animals as good as Muse, five times quicker; people come out younger than asked; uncensored.
+      typical-seconds: 12
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: steps, type: INT, min: 4, max: 16 }
+        - { name: width, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: height, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: seed, type: SEED }
+    - id: cyberrealistic-txt2img
+      kind: IMAGE
+      title: CyberRealistic (Z-Image)
+      description: A real photo look. The most natural skin, candid "phone photo" scenes, lively city streets and animals; follows the prompt more loosely, poses are sometimes odd; uncensored.
+      typical-seconds: 15
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: steps, type: INT, min: 6, max: 16 }
+        - { name: width, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: height, type: INT, min: 512, max: 2048, step: 16 }
+        - { name: seed, type: SEED }
+    - id: moody-txt2img
+      kind: IMAGE
+      title: Moody (Krea 2)
+      description: Young faces, often with an Asian look, soft glamour light; fast. Makes people younger than asked; uncensored.
+      typical-seconds: 15
+      params:
+        - { name: prompt, type: TEXT, required: true }
+        - { name: steps, type: INT, min: 6, max: 16 }
         - { name: width, type: INT, min: 512, max: 2048, step: 16 }
         - { name: height, type: INT, min: 512, max: 2048, step: 16 }
         - { name: seed, type: SEED }

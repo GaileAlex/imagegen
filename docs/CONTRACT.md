@@ -28,6 +28,9 @@ and the catalogue in `application.yml` (`imagegen.models`):
 | id                   | kind    | input         | output     | typical time (RTX 5060 Ti, warm) |
 |----------------------|---------|---------------|------------|----------------------------------|
 | `muse-txt2img`       | IMAGE   | -             | image/png  | 1024x1024 16 steps ~50 s         |
+| `krea2-realism-txt2img` | IMAGE   | -             | image/png  | 1024x1024 6 steps ~12 s          |
+| `cyberrealistic-txt2img` | IMAGE   | -             | image/png  | 1024x1024 9 steps ~15 s          |
+| `moody-txt2img`      | IMAGE   | -             | image/png  | 1024x1024 8 steps ~15 s          |
 | `muse-edit`          | EDIT    | image         | image/png  | ~60 s                            |
 | `muse-inpaint`       | INPAINT | image + mask  | image/png  | ~60 s                            |
 | `wan22-i2v-fastmove` | VIDEO   | image         | video/mp4  | 832x480 5 s ~160 s               |

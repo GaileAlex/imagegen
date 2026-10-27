@@ -36,7 +36,7 @@ class JobFactoryTest {
         Job job = create("muse-txt2img", params("prompt", "a cat"));
 
         assertThat(job.getParams()).containsEntry("prompt", "a cat").containsEntry("steps", 16)
-                .containsEntry("cfg", 2.5).containsEntry("width", 1024).containsEntry("height", 1024)
+                .containsEntry("cfg", 2.0).containsEntry("width", 1024).containsEntry("height", 1024)
                 .containsEntry("negativePrompt", "").containsEntry("seed", 424242L);
         assertThat(job.getSeed()).isEqualTo(424242L);
         assertThat(job.getUserId()).isEqualTo(7);

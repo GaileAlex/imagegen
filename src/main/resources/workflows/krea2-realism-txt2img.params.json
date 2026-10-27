@@ -1,0 +1,55 @@
+{
+  "description": "krea2RealismV1V2_krea2realism_3301206.safetensors (Krea 2) text to image on the Muse graph, CFG 1; same seed = same picture",
+  "output": "9",
+  "timing": "RTX 5060 Ti: 1248x720 6 steps ~9 s warm",
+  "params": {
+    "prompt": {
+      "targets": [
+        "6.prompt"
+      ],
+      "default": ""
+    },
+    "seed": {
+      "targets": [
+        "10.noise_seed"
+      ],
+      "default": 0
+    },
+    "steps": {
+      "targets": [
+        "6.steps",
+        "7.steps",
+        "10.steps"
+      ],
+      "default": 6,
+      "note": "author: 6 steps, CFG 1"
+    },
+    "width": {
+      "targets": [
+        "5.width",
+        "6.width",
+        "6.target_width",
+        "7.width",
+        "7.target_width"
+      ],
+      "default": 1024,
+      "note": "multiple of 16, 1024-2048"
+    },
+    "height": {
+      "targets": [
+        "5.height",
+        "6.height",
+        "6.target_height",
+        "7.height",
+        "7.target_height"
+      ],
+      "default": 1024
+    },
+    "filenamePrefix": {
+      "targets": [
+        "9.filename_prefix"
+      ],
+      "default": "krea2-realism"
+    }
+  }
+}

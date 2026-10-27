@@ -17,8 +17,9 @@ class ModelCatalogueTest {
     }
 
     @Test
-    void listsTheSevenModesInTheOrderOfTheContract() {
+    void listsTheTenModesInTheOrderOfTheContract() {
         assertThat(catalogue.list()).extracting(ModelDefinition::id).containsExactly("muse-txt2img",
+                "krea2-realism-txt2img", "cyberrealistic-txt2img", "moody-txt2img",
                 "muse-edit", "muse-inpaint", "wan22-i2v-fastmove",
                 "wan22-i2v", "ltx25-i2v", "ltx25-nsfw-i2v");
     }
@@ -45,10 +46,22 @@ class ModelCatalogueTest {
     @Test
     void museDefaultsComeFromTheParamsFile() {
         assertThat(param("muse-txt2img", "steps").defaultValue()).isEqualTo(16);
-        assertThat(param("muse-txt2img", "cfg").defaultValue()).isEqualTo(2.5);
+        assertThat(param("muse-txt2img", "cfg").defaultValue()).isEqualTo(2.0);
         assertThat(param("muse-txt2img", "width").defaultValue()).isEqualTo(1024);
         assertThat(param("muse-edit", "steps").defaultValue()).isEqualTo(10);
         assertThat(param("muse-edit", "cfg").defaultValue()).isEqualTo(1.0);
+    }
+
+    @Test
+    void theFastPictureModesRunAtCfgOneWithTheirOwnSteps() {
+        assertThat(param("krea2-realism-txt2img", "steps").defaultValue()).isEqualTo(6);
+        assertThat(param("cyberrealistic-txt2img", "steps").defaultValue()).isEqualTo(9);
+        assertThat(param("moody-txt2img", "steps").defaultValue()).isEqualTo(8);
+        for (String id : List.of("krea2-realism-txt2img", "cyberrealistic-txt2img", "moody-txt2img")) {
+            assertThat(TestCatalogue.model(id).kind()).isEqualTo(JobKind.IMAGE);
+            assertThat(TestCatalogue.model(id).params()).extracting(ParamDefinition::name)
+                    .containsExactly("prompt", "steps", "width", "height", "seed");
+        }
     }
 
     @Test
