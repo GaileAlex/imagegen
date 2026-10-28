@@ -1,5 +1,6 @@
 package ee.gaile.imagegen.web;
 
+import ee.gaile.imagegen.idea.IdeaUnavailableException;
 import ee.gaile.imagegen.web.dto.ErrorBody;
 import ee.gaile.imagegen.service.ComfyUnavailableException;
 import ee.gaile.imagegen.service.InvalidParamsException;
@@ -54,6 +55,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ComfyUnavailableException.class)
     public ResponseEntity<ErrorBody> comfyDown(ComfyUnavailableException e) {
         return body(HttpStatus.SERVICE_UNAVAILABLE, "comfyui_unavailable", e.getMessage());
+    }
+
+    @ExceptionHandler(IdeaUnavailableException.class)
+    public ResponseEntity<ErrorBody> ideaUnavailable(IdeaUnavailableException e) {
+        return body(HttpStatus.SERVICE_UNAVAILABLE, "idea_unavailable", e.getMessage());
     }
 
     @ExceptionHandler(NotFoundException.class)

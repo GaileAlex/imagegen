@@ -5,3 +5,6 @@ imagegen:
   comfyui-io-dir: ""
   translator:
     url: http://localhost:11435
+  idea:
+    gpu-url: http://localhost:11434
+    url: http://localhost:11435

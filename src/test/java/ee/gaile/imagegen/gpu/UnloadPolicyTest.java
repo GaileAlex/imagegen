@@ -29,7 +29,8 @@ class UnloadPolicyTest {
     void setUp() {
         queue = new JobQueue(gateway, new FakeTranslator(), job -> {
         }, job -> {
-        }, PROPERTIES, clock);
+        }, PROPERTIES, clock, () -> {
+        });
         queue.start();
         policy = new UnloadPolicy(queue, PROPERTIES, clock);
     }

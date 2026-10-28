@@ -1,0 +1,171 @@
+package ee.gaile.imagegen.idea;
+
+import ee.gaile.imagegen.idea.IdeaPrompts.Start;
+import ee.gaile.imagegen.image.InputImages;
+import ee.gaile.imagegen.job.Job;
+import ee.gaile.imagegen.job.JobKind;
+import ee.gaile.imagegen.job.JobQueue;
+import ee.gaile.imagegen.model.ModelCatalogue;
+import ee.gaile.imagegen.model.ModelDefinition;
+import ee.gaile.imagegen.model.ParamDefinition;
+import ee.gaile.imagegen.service.InvalidParamsException;
+import ee.gaile.imagegen.service.SourceImages;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Map;
+
+/**
+ * Writes the prompts of a video from a short idea: the start frame and the video together, or the video for a
+ * given picture, or a video from the text alone. Nothing is queued: the page shows the prompts in its fields, the
+ * user may change them and starts the generation as usual.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class PromptIdeaService {
+
+    static final int MAX_IDEA_LENGTH = 1000;
+    /** The model looks at the picture this small: enough to tell what is in it, quick to encode on the CPU */
+    static final int PICTURE_SIDE = 768;
+
+    private final ModelCatalogue catalogue;
+    private final SourceImages sources;
+    private final IdeaWriter writer;
+    private final JobQueue queue;
+    private final ObjectMapper mapper;
+
+    /**
+     * @param requestJson the "request" part, an {@link IdeaRequest}
+     * @param image       the start picture of the user, null when there is none or it is given as sourceJobId
+     */
+    public PromptIdea write(long userId, String requestJson, byte[] image) {
+        IdeaRequest request = parse(requestJson);
+        String idea = request.idea() == null ? "" : request.idea().strip();
+        if (idea.isEmpty()) {
+            throw new InvalidParamsException("The idea is empty");
+        }
+        if (idea.length() > MAX_IDEA_LENGTH) {
+            throw new InvalidParamsException("The idea is longer than " + MAX_IDEA_LENGTH + " characters");
+        }
+        ModelDefinition model = catalogue.find(request.videoModel())
+                .filter(found -> found.kind() == JobKind.VIDEO)
+                .orElseThrow(() -> new InvalidParamsException("Not a video model: " + request.videoModel()));
+        int seconds = seconds(model, request.seconds());
+        boolean portrait = "portrait".equals(request.orientation());
+
+        Job source = request.sourceJobId() != null ? sources.find(userId, request.sourceJobId()) : null;
+        if (source != null && !source.getStatus().isFinished()) {
+            throw new InvalidParamsException("sourceJobId has no picture yet");
+        }
+        byte[] picture = source != null ? sources.read(source) : image;
+        boolean withPicture = picture != null && picture.length > 0;
+        Start start;
+        if (Boolean.TRUE.equals(request.frame())) {
+            start = Start.FRAME;
+        } else if (withPicture) {
+            start = Start.PICTURE;
+        } else if (!model.needsImage()) {
+            start = Start.TEXT;
+        } else {
+            throw new InvalidParamsException(model.id() + " needs a start picture or a frame");
+        }
+
+        String system = IdeaPrompts.system(start, model.promptStyle(), seconds, portrait);
+        String user = IdeaPrompts.user(idea, start == Start.PICTURE ? sourcePrompt(source) : null);
+        Map<String, Object> schema = IdeaPrompts.schema(start);
+        byte[] seen = start == Start.PICTURE ? small(picture) : null;
+        long started = System.nanoTime();
+        Map<String, String> answer = onGpu(system, user, seen, schema);
+        String device = "GPU";
+        if (answer == null) {
+            answer = writer.write(system, user, seen, schema, false);
+            device = "CPU";
+        }
+        log.info("Prompt idea for {} ({}, {} s) of user {} written on the {} in {} ms", model.id(), start, seconds,
+                userId, device, (System.nanoTime() - started) / 1_000_000);
+        if (start == Start.PICTURE) {
+            log.debug("The idea model sees in the picture: {}", answer.get(IdeaPrompts.PICTURE));
+        }
+        return new PromptIdea(answer.get(IdeaPrompts.FRAME_PROMPT), answer.get(IdeaPrompts.VIDEO_PROMPT));
+    }
+
+    /**
+     * @return null when a job has the GPU, or the GPU instance failed: the CPU takes over then
+     */
+    private Map<String, String> onGpu(String system, String user, byte[] picture, Map<String, Object> schema) {
+        if (!writer.hasGpu() || !queue.lendGpu()) {
+            return null;
+        }
+        try {
+            return writer.write(system, user, picture, schema, true);
+        } catch (IdeaUnavailableException e) {
+            log.warn("Prompt idea failed on the GPU, the CPU takes over: {}", e.getMessage());
+            return null;
+        } finally {
+            queue.returnGpu();
+        }
+    }
+
+    private IdeaRequest parse(String json) {
+        if (json == null || json.isBlank()) {
+            throw new InvalidParamsException("The request part is missing");
+        }
+        try {
+            IdeaRequest request = mapper.readValue(json, IdeaRequest.class);
+            if (request == null || request.videoModel() == null) {
+                throw new InvalidParamsException("The request has no videoModel");
+            }
+            return request;
+        } catch (RuntimeException e) {
+            if (e instanceof InvalidParamsException invalid) {
+                throw invalid;
+            }
+            throw new InvalidParamsException("The request is not valid JSON of the expected shape");
+        }
+    }
+
+    /** The asked length within the range of the mode, else its default */
+    private static int seconds(ModelDefinition model, Integer asked) {
+        ParamDefinition param = model.params().stream()
+                .filter(candidate -> candidate.name().equals("seconds"))
+                .findFirst()
+                .orElse(null);
+        if (param == null) {
+            return asked != null ? asked : 5;
+        }
+        if (asked == null) {
+            return ((Number) param.defaultValue()).intValue();
+        }
+        return Math.clamp(asked, param.min().intValue(), param.max().intValue());
+    }
+
+    /** The English prompt a generated picture was made from: the best hint of what it shows */
+    private static String sourcePrompt(Job source) {
+        if (source == null || source.getKind() != JobKind.IMAGE) {
+            return null;
+        }
+        String translated = source.getTranslations().get("prompt");
+        if (translated != null) {
+            return translated;
+        }
+        return source.getParams().get("prompt") instanceof String prompt ? prompt : null;
+    }
+
+    private static byte[] small(byte[] picture) {
+        BufferedImage image = InputImages.limitSide(InputImages.decode(picture), PICTURE_SIDE);
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ImageIO.write(image, "jpg", out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+}

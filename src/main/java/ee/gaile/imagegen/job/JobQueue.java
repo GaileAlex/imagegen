@@ -26,6 +26,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * (a user never served comes first), so a long row of jobs of one user does not hold the others up; the jobs of one
  * user keep their order (a picture runs before the video waiting for it). A single worker thread takes the next job
  * and runs it through ComfyUI; the unload of the model happens under the same lock, so it never cuts a job off.
+ * Between the jobs a {@link GpuGuest} may borrow the GPU: the next job waits until it is done and has left.
  */
 @Slf4j
 @Component
@@ -38,6 +39,7 @@ public class JobQueue {
     private final JobRepository repository;
     private final ImagegenProperties properties;
     private final Clock clock;
+    private final GpuGuest guest;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition jobQueued = lock.newCondition();
@@ -52,6 +54,10 @@ public class JobQueue {
     /** End of the last job */
     private Instant lastActivity;
     private Thread worker;
+    /** Guests on the GPU right now; no job starts while there are any */
+    private int guests;
+    /** A guest used the GPU since it last left: its model may still be there */
+    private boolean guestLoaded;
 
     @PostConstruct
     public void start() {
@@ -127,6 +133,47 @@ public class JobQueue {
     }
 
     /**
+     * Lends the GPU to a guest when no job is running or waiting; the model of the last job is unloaded first (the
+     * next job would mostly load its model anyway). Every true answer must be followed by {@link #returnGpu}.
+     *
+     * @return false: a job has the GPU or is about to, the guest runs elsewhere (CPU)
+     */
+    public boolean lendGpu() {
+        lock.lock();
+        try {
+            if (running != null || !queued.isEmpty()) {
+                return false;
+            }
+            if (loaded) {
+                try {
+                    gateway.free();
+                } catch (RuntimeException e) {
+                    log.warn("Unload for a GPU guest failed: {}", e.getMessage());
+                    return false;
+                }
+                loaded = false;
+                log.info("Model unloaded for a GPU guest");
+            }
+            guests++;
+            guestLoaded = true;
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** The guest is done; a waiting job may start (the guest leaves the GPU before it) */
+    public void returnGpu() {
+        lock.lock();
+        try {
+            guests--;
+            jobQueued.signal();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * Unloads the model unless a job is running or queued.
      *
      * @return true when nothing is loaded any more
@@ -134,6 +181,10 @@ public class JobQueue {
     public boolean unloadIfIdle() {
         lock.lock();
         try {
+            if (guests == 0 && guestLoaded) {
+                guest.leaveGpu();
+                guestLoaded = false;
+            }
             if (!loaded) {
                 return true;
             }
@@ -197,11 +248,14 @@ public class JobQueue {
     private void work() {
         while (!Thread.currentThread().isInterrupted()) {
             Job job;
+            boolean guestLeaves;
             lock.lock();
             try {
-                while (queued.isEmpty()) {
+                while (queued.isEmpty() || guests > 0) {
                     jobQueued.await();
                 }
+                guestLeaves = guestLoaded;
+                guestLoaded = false;
                 job = plannedOrder().getFirst();
                 queued.remove(job);
                 lastTurns.put(job.getUserId(), ++turn);
@@ -217,6 +271,9 @@ public class JobQueue {
                 return;
             } finally {
                 lock.unlock();
+            }
+            if (guestLeaves) {
+                guest.leaveGpu();
             }
             execute(job);
         }

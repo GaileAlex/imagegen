@@ -51,6 +51,20 @@ imagegen:
     url: ${TRANSLATOR_URL:http://cv-ollama-cpu:11434}
     model: huihui_ai/gemma-4-abliterated:e4b
     timeout: 3m
+  # The prompts of a video written from a short idea (POST /api/prompt-ideas): an uncensored model that sees
+  # pictures, pulled into both Ollama instances. The GPU one (7-17 s) while no job runs or waits, the model of the
+  # last job is unloaded for it and the next job sends it away; the CPU one (25-50 s) while a job has the GPU.
+  # 26b (MoE, 4B active, ~14 GB on the GPU) instead of e4b (4.5 GB, twice as fast): e4b invented people in a photo
+  # of an empty room and softened explicit ideas, 26b keeps to the picture (test 2026-10-28)
+  idea:
+    gpu-url: ${IDEA_GPU_URL:http://cv-ollama:11434}
+    url: ${TRANSLATOR_URL:http://cv-ollama-cpu:11434}
+    model: huihui_ai/gemma-4-abliterated:26b
+    timeout: 3m
+    # it takes most of the card: no longer than a second variant needs
+    gpu-keep-alive: 3m
+    keep-alive: 15m
+    temperature: 0.9
   # The modes of docs/CONTRACT.md. Defaults of the params come from workflows/<id>.params.json unless stated here;
   # the other params of that file (filenamePrefix, sampler, halfWidth ...) are set by the service
   models:
@@ -125,6 +139,7 @@ imagegen:
       title: Wan 2.2 Fast Move
       description: Video from a start image, lively motion, no sound; the face of a real person may drift (Wan 2.2 keeps it better). 832x480 (16 fps).
       typical-seconds: 160
+      prompt-style: WAN
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
@@ -137,6 +152,7 @@ imagegen:
       title: Wan 2.2
       description: Video from a start image that keeps the face of a real person best; calmer motion than Fast Move, no sound. 832x480 (16 fps).
       typical-seconds: 145
+      prompt-style: WAN
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
@@ -149,6 +165,7 @@ imagegen:
       title: LTX 2.5
       description: Video with sound from a text, or from a start image when one is given. 1216x704 (24 fps).
       typical-seconds: 115
+      prompt-style: LTX
       image-optional: true
       params:
         - { name: prompt, type: TEXT, required: true }
@@ -162,6 +179,7 @@ imagegen:
       title: LTX 2.5 NSFW
       description: LTX 2.5 with NSFW fine-tunes merged in, for nude and explicit scenes (the plain LTX blurs and dodges them). Sound, 1216x704 (24 fps); from a text or a start image.
       typical-seconds: 150
+      prompt-style: LTX
       image-optional: true
       params:
         - { name: prompt, type: TEXT, required: true }

@@ -25,6 +25,8 @@ public class JobQueueTest {
     private final List<JobStatus> saved = new CopyOnWriteArrayList<>();
     private final MutableClock clock = new MutableClock();
     private final List<Job> prepared = new CopyOnWriteArrayList<>();
+    // the jobs ComfyUI had started when the GPU guest left, one entry per leave
+    private final List<Integer> guestLeaves = new CopyOnWriteArrayList<>();
     private volatile String sourceProblem;
     private JobQueue queue;
 
@@ -36,7 +38,8 @@ public class JobQueueTest {
             }
             prepared.add(job);
         };
-        queue = new JobQueue(gateway, translator, sources, job -> saved.add(job.getStatus()), PROPERTIES, clock);
+        queue = new JobQueue(gateway, translator, sources, job -> saved.add(job.getStatus()), PROPERTIES, clock,
+                () -> guestLeaves.add(gateway.started.size()));
         queue.start();
     }
 
@@ -47,6 +50,38 @@ public class JobQueueTest {
 
     public static Job job(long userId, String model) {
         return new Job(UUID.randomUUID(), userId, "user" + userId, model, JobKind.IMAGE, Map.of(), 1, null);
+    }
+
+    @Test
+    void theGpuIsLentOnlyWhenNoJobRunsOrWaits() throws InterruptedException {
+        Job first = job(1, "first");
+        queue.submit(first);
+        gateway.awaitRunning();
+        assertThat(queue.lendGpu()).isFalse();
+
+        gateway.complete(first);
+        await().until(() -> first.getStatus() == JobStatus.DONE);
+        assertThat(queue.lendGpu()).isTrue();
+        // the model of the last job left the GPU for the guest
+        assertThat(gateway.frees).isEqualTo(1);
+        assertThat(queue.state().loaded()).isFalse();
+        queue.returnGpu();
+    }
+
+    @Test
+    void aJobWaitsForTheGuestAndTheGuestLeavesBeforeIt() throws InterruptedException {
+        assertThat(queue.lendGpu()).isTrue();
+        Job job = job(1, "after-guest");
+        queue.submit(job);
+        assertThat(queue.lendGpu()).isFalse();
+
+        Thread.sleep(200);
+        assertThat(gateway.started).isEmpty();
+        queue.returnGpu();
+
+        gateway.awaitRunning();
+        assertThat(guestLeaves).containsExactly(0);
+        assertThat(gateway.started).containsExactly("after-guest");
     }
 
     @Test

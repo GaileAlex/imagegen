@@ -175,6 +175,35 @@ The input image the job used (png), for the history card of an edit / video. 404
 - DONE / FAILED / CANCELLED -> files and record deleted
 Answer `204`.
 
+## Prompt ideas
+
+### `POST /api/prompt-ideas` (multipart)
+
+The prompts of a video written from a short idea ("люди гуляют в парке") by an uncensored language model that
+sees pictures (`imagegen.idea`). Nothing is queued: the page puts the prompts into its fields and the user starts
+the jobs as usual. While no job runs or waits the model runs on the GPU (`cv-ollama`, 7-17 s with a cold load): the
+model of the last job is unloaded for it, a job submitted meanwhile waits for the idea, and the idea model leaves the
+GPU before the job starts. While a job has the GPU, or the GPU instance fails, the CPU one (`cv-ollama-cpu`,
+25-50 s) answers. The model must be pulled into both instances.
+
+| Part      | Content                                                                                            |
+|-----------|----------------------------------------------------------------------------------------------------|
+| `request` | JSON: `idea` (required, up to 1000 characters, any language), `videoModel` (a VIDEO mode), `seconds` (null = the default of the mode, clamped to its range), `frame` (true: the start frame is made by a picture model first), `orientation` (`landscape`/`portrait` of that frame), `sourceJobId` (the start picture is this finished image job of the user) |
+| `image`   | the start picture of the user (optional; ignored with `frame` or `sourceJobId`)                    |
+
+Three cases, by what the video starts from:
+
+- `frame: true` -> `{"framePrompt": "...", "videoPrompt": "..."}`: both from one answer of the model, the frame prompt
+  written first, so the video continues exactly that frame (same people, clothes, place, light).
+- a picture (`image` or `sourceJobId`) -> `{"videoPrompt": "..."}`: the model looks at the picture (768 px) and
+  animates what it shows; with `sourceJobId` of an IMAGE job its (English) prompt is given to the model as well.
+- neither, for a mode that runs from the text alone (LTX) -> `{"videoPrompt": "..."}` describing the looks too.
+
+The prompt style follows `prompt-style` of the mode: `WAN` (2-4 sentences of motion and camera, no sound) or `LTX`
+(one paragraph in time order with camera, light and sound). The prompts are English, so the translator leaves them.
+Errors: 400 `invalid_params` (empty or too long idea, not a VIDEO mode, a mode that needs a picture without one,
+`sourceJobId` not a finished image job of the user), 503 `idea_unavailable` (no model set, no answer, no JSON).
+
 ## GPU state and unload
 
 The model takes ~13 GB of the 16 GB VRAM shared with Ollama, Whisper and the TTS services, so it is unloaded
