@@ -62,6 +62,11 @@ public class ApiExceptionHandler {
         return body(HttpStatus.SERVICE_UNAVAILABLE, "idea_unavailable", e.getMessage());
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorBody> conflict(ConflictException e) {
+        return body(HttpStatus.CONFLICT, e.code(), e.getMessage());
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorBody> notFound(NotFoundException e) {
         return body(HttpStatus.NOT_FOUND, "not_found", e.getMessage());

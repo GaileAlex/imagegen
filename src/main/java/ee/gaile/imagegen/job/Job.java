@@ -35,6 +35,8 @@ public class Job {
     private volatile Map<String, String> translations = Map.of();
     /** An image job that had not finished at the submit: its picture becomes the input when this job starts */
     private volatile UUID sourceJobId;
+    /** Kept past the retention and not deleted until unpinned */
+    private volatile boolean pinned;
 
     /** Not stored: only meaningful while RUNNING */
     private volatile Progress progress;

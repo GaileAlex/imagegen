@@ -139,7 +139,8 @@ Errors (body `{"error": "<code>", "message": "..."}`):
   "finishedAt": null,
   "expiresAt": null,
   "error": null,
-  "result": null
+  "result": null,
+  "pinned": false
 }
 ```
 
@@ -153,11 +154,13 @@ Errors (body `{"error": "<code>", "message": "..."}`):
   Cyrillic in it (`prompt`, `negativePrompt`) is translated by a local uncensored model (Ollama on the CPU, see
   `imagegen.translator`) when the job starts; `{}` when nothing needed it. A failed translation fails the job with
   `"prompt translation failed"`. The translation model is unloaded together with the GPU model.
-- `expiresAt` = `finishedAt` + 10 days
+- `expiresAt` = `finishedAt` + 10 days, null for a pinned job
+- `pinned` = kept past the 10 days, not deleted until unpinned (`PUT` / `DELETE /api/jobs/{id}/pin`)
 
 ### `GET /api/jobs?limit=50`
 
-History of the user, newest first: the same objects as `GET /api/jobs/{id}`. At most 10 days back.
+History of the user, newest first: the same objects as `GET /api/jobs/{id}`. At most 10 days back, pinned jobs of
+any age.
 
 ### `GET /api/jobs/{id}/result`
 
@@ -173,7 +176,14 @@ The input image the job used (png), for the history card of an edit / video. 404
 - QUEUED -> removed from the queue, status CANCELLED
 - RUNNING -> ComfyUI `/interrupt`, status CANCELLED
 - DONE / FAILED / CANCELLED -> files and record deleted
+- pinned -> `409 pinned`, nothing deleted
 Answer `204`.
+
+### `PUT /api/jobs/{id}/pin`, `DELETE /api/jobs/{id}/pin`
+
+Pins or unpins the job: a pinned job is not deleted by the retention cleanup nor by `DELETE /api/jobs/{id}`.
+Answer `200` with the job as `GET /api/jobs/{id}` shows it. Only a DONE job can be pinned (`409 not_done`); unpin
+works on any job.
 
 ## Prompt ideas
 
@@ -261,7 +271,7 @@ Volume `imagegen-results` mounted at `/data`:
 
 No database: the record is a small file next to the result, so both disappear together. Loaded into memory at
 start; a record QUEUED or RUNNING at start becomes FAILED (`"error": "service restarted"`). An hourly job deletes
-everything finished more than 10 days ago (`imagegen.retention`).
+everything finished more than 10 days ago (`imagegen.retention`), except the pinned jobs.
 
 ## cv-app side
 

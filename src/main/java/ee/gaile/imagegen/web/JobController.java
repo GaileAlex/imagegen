@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -119,18 +120,36 @@ public class JobController {
                 .body(new FileSystemResource(file));
     }
 
-    /** Pending jobs are cancelled (the record stays), finished ones are deleted with their files */
+    /** Pending jobs are cancelled (the record stays), finished ones are deleted with their files, pinned ones refused */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@RequestHeader("X-User-Id") long userId, @PathVariable UUID id) {
         Job job = own(userId, id);
         if (!job.getStatus().isFinished() && queue.cancel(job)) {
             return ResponseEntity.noContent().build();
         }
+        if (job.isPinned()) {
+            throw new ConflictException("pinned", "The job is pinned, unpin it first");
+        }
         // Finished meanwhile: the cancel found nothing pending, so the delete below is what the user asked for
         if (job.getStatus().isFinished()) {
             store.delete(id);
         }
         return ResponseEntity.noContent().build();
+    }
+
+    /** Only a result can be pinned: a job without one has nothing to keep */
+    @PutMapping("/{id}/pin")
+    public JobView pin(@RequestHeader("X-User-Id") long userId, @PathVariable UUID id) {
+        if (own(userId, id).getStatus() != JobStatus.DONE) {
+            throw new ConflictException("not_done", "Only a finished job with a result can be pinned");
+        }
+        return view(store.pin(id, true).orElseThrow(() -> new NotFoundException("No such job")));
+    }
+
+    @DeleteMapping("/{id}/pin")
+    public JobView unpin(@RequestHeader("X-User-Id") long userId, @PathVariable UUID id) {
+        own(userId, id);
+        return view(store.pin(id, false).orElseThrow(() -> new NotFoundException("No such job")));
     }
 
     private Job own(long userId, UUID id) {

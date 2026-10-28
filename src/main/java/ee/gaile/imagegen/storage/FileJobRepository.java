@@ -97,10 +97,22 @@ public class FileJobRepository implements JobStore {
         Instant oldest = clock.instant().minus(properties.retention());
         return index.values().stream()
                 .filter(job -> job.getUserId() == userId)
-                .filter(job -> job.getCreatedAt().isAfter(oldest))
+                .filter(job -> job.isPinned() || job.getCreatedAt().isAfter(oldest))
                 .sorted(Comparator.comparing(Job::getCreatedAt).reversed())
                 .limit(limit)
                 .toList();
+    }
+
+    /** Under the lock of {@link #delete}, so a job the cleanup has just deleted is not written back */
+    @Override
+    public synchronized Optional<Job> pin(UUID id, boolean pinned) {
+        Job job = index.get(id);
+        if (job == null) {
+            return Optional.empty();
+        }
+        job.setPinned(pinned);
+        save(job);
+        return Optional.of(job);
     }
 
     @Override
@@ -109,11 +121,12 @@ public class FileJobRepository implements JobStore {
         files.deleteAll(id);
     }
 
-    /** Jobs finished more than the retention ago go with all their files */
+    /** Jobs finished more than the retention ago go with all their files, the pinned ones stay */
     @Scheduled(fixedDelayString = "PT1H", initialDelayString = "PT1M")
-    public void cleanup() {
+    public synchronized void cleanup() {
         Instant limit = clock.instant().minus(properties.retention());
         List<UUID> expired = index.values().stream()
+                .filter(job -> !job.isPinned())
                 .filter(job -> job.getFinishedAt() != null && job.getFinishedAt().isBefore(limit))
                 .map(Job::getId)
                 .toList();

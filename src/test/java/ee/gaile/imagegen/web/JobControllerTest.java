@@ -43,6 +43,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -339,5 +340,71 @@ class JobControllerTest {
         mockMvc.perform(delete("/api/jobs/" + ID).header("X-User-Id", "7")).andExpect(status().isNoContent());
 
         verify(store).delete(ID);
+    }
+
+    @Test
+    void deleteOfAPinnedJobIs409AndKeepsIt() throws Exception {
+        Job job = done(7, JobKind.IMAGE);
+        job.setPinned(true);
+        given(store.find(ID)).willReturn(Optional.of(job));
+
+        mockMvc.perform(delete("/api/jobs/" + ID).header("X-User-Id", "7"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("pinned"));
+
+        verify(store, never()).delete(any());
+    }
+
+    @Test
+    void pinKeepsADoneJobWithoutAnExpiry() throws Exception {
+        Job job = done(7, JobKind.VIDEO);
+        given(store.find(ID)).willReturn(Optional.of(job));
+        given(store.pin(ID, true)).willAnswer(invocation -> {
+            job.setPinned(true);
+            return Optional.of(job);
+        });
+
+        mockMvc.perform(put("/api/jobs/" + ID + "/pin").header("X-User-Id", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pinned").value(true))
+                .andExpect(jsonPath("$.expiresAt").doesNotExist());
+    }
+
+    @Test
+    void unpinGivesTheExpiryBack() throws Exception {
+        Job job = done(7, JobKind.IMAGE);
+        job.setPinned(true);
+        given(store.find(ID)).willReturn(Optional.of(job));
+        given(store.pin(ID, false)).willAnswer(invocation -> {
+            job.setPinned(false);
+            return Optional.of(job);
+        });
+
+        mockMvc.perform(delete("/api/jobs/" + ID + "/pin").header("X-User-Id", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pinned").value(false))
+                .andExpect(jsonPath("$.expiresAt").value("2026-11-05T12:01:05Z"));
+    }
+
+    @Test
+    void aJobWithoutAResultCannotBePinned() throws Exception {
+        given(store.find(ID)).willReturn(Optional.of(job(7, JobKind.IMAGE, JobStatus.FAILED)));
+
+        mockMvc.perform(put("/api/jobs/" + ID + "/pin").header("X-User-Id", "7"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("not_done"));
+
+        verify(store, never()).pin(any(), eq(true));
+    }
+
+    @Test
+    void pinOfAnotherUsersJobIs404() throws Exception {
+        given(store.find(ID)).willReturn(Optional.of(done(8, JobKind.IMAGE)));
+
+        mockMvc.perform(put("/api/jobs/" + ID + "/pin").header("X-User-Id", "7")).andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/jobs/" + ID + "/pin").header("X-User-Id", "7")).andExpect(status().isNotFound());
+
+        verify(store, never()).pin(any(), eq(true));
+        verify(store, never()).pin(any(), eq(false));
     }
 }

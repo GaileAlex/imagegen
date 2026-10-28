@@ -19,6 +19,13 @@ public interface JobStore extends JobRepository {
      */
     List<Job> findByUser(long userId, int limit);
 
+    /**
+     * A pinned job outlives the retention and is not deleted until unpinned.
+     *
+     * @return the job, empty when it is gone
+     */
+    Optional<Job> pin(UUID id, boolean pinned);
+
     /** The record and all the files of the job */
     void delete(UUID id);
 }

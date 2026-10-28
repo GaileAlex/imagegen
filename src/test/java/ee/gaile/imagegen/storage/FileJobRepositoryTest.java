@@ -187,4 +187,48 @@ class FileJobRepositoryTest {
 
         assertThat(fresh.find(good.getId())).isPresent();
     }
+
+    @Test
+    void aPinnedJobOutlivesTheRetentionAndStaysInTheList() throws IOException {
+        Job pinned = job(1, clock.instant());
+        pinned.setStatus(JobStatus.DONE);
+        pinned.setFinishedAt(clock.instant());
+        repository.save(pinned);
+        Files.writeString(files.result(pinned.getId(), "image/png"), "r");
+
+        assertThat(repository.pin(pinned.getId(), true)).containsSame(pinned);
+        clock.advance(Duration.ofDays(30));
+        repository.cleanup();
+
+        assertThat(repository.find(pinned.getId())).isPresent();
+        assertThat(files.result(pinned.getId(), "image/png")).exists();
+        assertThat(repository.findByUser(1, 50)).containsExactly(pinned);
+        // the pin is written down
+        assertThat(restart().find(pinned.getId()).orElseThrow().isPinned()).isTrue();
+
+        repository.pin(pinned.getId(), false);
+        repository.cleanup();
+
+        assertThat(repository.find(pinned.getId())).isEmpty();
+    }
+
+    @Test
+    void aPinOfAJobThatIsGoneWritesNothing() {
+        UUID gone = UUID.randomUUID();
+
+        assertThat(repository.pin(gone, true)).isEmpty();
+        assertThat(files.record(gone)).doesNotExist();
+    }
+
+    @Test
+    void aRecordWrittenBeforeThePinLoadsUnpinned() throws IOException {
+        Job job = job(1, clock.instant());
+        job.setStatus(JobStatus.DONE);
+        repository.save(job);
+        Path record = files.record(job.getId());
+        Files.writeString(record, Files.readString(record).replace(",\"pinned\":false", ""));
+        assertThat(Files.readString(record)).doesNotContain("pinned");
+
+        assertThat(restart().find(job.getId()).orElseThrow().isPinned()).isFalse();
+    }
 }
