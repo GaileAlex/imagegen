@@ -154,7 +154,7 @@ Errors (body `{"error": "<code>", "message": "..."}`):
   Cyrillic in it (`prompt`, `negativePrompt`) is translated by a local uncensored model (Ollama on the CPU, see
   `imagegen.translator`) when the job starts; `{}` when nothing needed it. A failed translation fails the job with
   `"prompt translation failed"`. The translation model is unloaded together with the GPU model.
-- `expiresAt` = `finishedAt` + 10 days, null for a pinned job
+- `expiresAt` = `finishedAt` + 10 days (from the last unpin when later), null for a pinned job
 - `pinned` = kept past the 10 days, not deleted until unpinned (`PUT` / `DELETE /api/jobs/{id}/pin`)
 
 ### `GET /api/jobs?limit=50`
@@ -183,7 +183,8 @@ Answer `204`.
 
 Pins or unpins the job: a pinned job is not deleted by the retention cleanup nor by `DELETE /api/jobs/{id}`.
 Answer `200` with the job as `GET /api/jobs/{id}` shows it. Only a DONE job can be pinned (`409 not_done`); unpin
-works on any job.
+works on any job and starts the 10 days again (`unpinnedAt` in the record), so an old job does not go at the next
+cleanup.
 
 ## Prompt ideas
 

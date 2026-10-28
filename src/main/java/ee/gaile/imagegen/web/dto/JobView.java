@@ -15,7 +15,7 @@ import java.util.UUID;
  * A job as GET /api/jobs shows it.
  *
  * @param position jobs ahead of it including the running one, null once it is not pending
- * @param expiresAt    finishedAt + retention, null while it is pending or pinned
+ * @param expiresAt    finishedAt (or the last unpin) + retention, null while it is pending or pinned
  * @param translations param name -> the English text the model got instead of the Russian one
  * @param pinned       kept past the retention, not deleted until unpinned
  */
@@ -26,10 +26,11 @@ public record JobView(UUID jobId, String model, JobKind kind, JobStatus status, 
 
     public static JobView of(Job job, int position, Duration retention) {
         Instant finishedAt = job.getFinishedAt();
+        Instant keptSince = job.keptSince();
         return new JobView(job.getId(), job.getModel(), job.getKind(), job.getStatus(),
                 position >= 0 ? position : null, job.getProgress(), job.getParams(), job.getTranslations(),
                 job.getSeed(), job.getCreatedAt(), job.getStartedAt(), finishedAt,
-                finishedAt != null && !job.isPinned() ? finishedAt.plus(retention) : null, job.getError(),
+                keptSince != null && !job.isPinned() ? keptSince.plus(retention) : null, job.getError(),
                 job.getResult(), job.isPinned());
     }
 }

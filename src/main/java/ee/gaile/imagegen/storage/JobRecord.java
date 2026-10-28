@@ -14,13 +14,13 @@ import java.util.UUID;
 record JobRecord(UUID jobId, long userId, String userName, String model, JobKind kind, JobStatus status,
                  Map<String, Object> params, long seed, Instant createdAt, Instant startedAt, Instant finishedAt,
                  String error, JobResult result, Map<String, String> translations, UUID sourceJobId,
-                 Boolean pinned) {
+                 Boolean pinned, Instant unpinnedAt) {
 
     static JobRecord of(Job job) {
         return new JobRecord(job.getId(), job.getUserId(), job.getUserName(), job.getModel(), job.getKind(),
                 job.getStatus(), job.getParams(), job.getSeed(), job.getCreatedAt(), job.getStartedAt(),
                 job.getFinishedAt(), job.getError(), job.getResult(), job.getTranslations(), job.getSourceJobId(),
-                job.isPinned());
+                job.isPinned(), job.getUnpinnedAt());
     }
 
     Job toJob() {
@@ -35,6 +35,7 @@ record JobRecord(UUID jobId, long userId, String userName, String model, JobKind
         job.setSourceJobId(sourceJobId);
         // Records written before the pin have none
         job.setPinned(Boolean.TRUE.equals(pinned));
+        job.setUnpinnedAt(unpinnedAt);
         return job;
     }
 }

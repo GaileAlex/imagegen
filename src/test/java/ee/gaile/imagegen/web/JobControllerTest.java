@@ -371,19 +371,20 @@ class JobControllerTest {
     }
 
     @Test
-    void unpinGivesTheExpiryBack() throws Exception {
+    void unpinStartsTheTenDaysAgain() throws Exception {
         Job job = done(7, JobKind.IMAGE);
         job.setPinned(true);
         given(store.find(ID)).willReturn(Optional.of(job));
         given(store.pin(ID, false)).willAnswer(invocation -> {
             job.setPinned(false);
+            job.setUnpinnedAt(Instant.parse("2026-12-01T08:00:00Z"));
             return Optional.of(job);
         });
 
         mockMvc.perform(delete("/api/jobs/" + ID + "/pin").header("X-User-Id", "7"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pinned").value(false))
-                .andExpect(jsonPath("$.expiresAt").value("2026-11-05T12:01:05Z"));
+                .andExpect(jsonPath("$.expiresAt").value("2026-12-11T08:00:00Z"));
     }
 
     @Test

@@ -97,18 +97,30 @@ public class FileJobRepository implements JobStore {
         Instant oldest = clock.instant().minus(properties.retention());
         return index.values().stream()
                 .filter(job -> job.getUserId() == userId)
-                .filter(job -> job.isPinned() || job.getCreatedAt().isAfter(oldest))
+                .filter(job -> job.isPinned() || keptFrom(job).isAfter(oldest))
                 .sorted(Comparator.comparing(Job::getCreatedAt).reversed())
                 .limit(limit)
                 .toList();
     }
 
-    /** Under the lock of {@link #delete}, so a job the cleanup has just deleted is not written back */
+    /** A pending job counts from its creation */
+    private static Instant keptFrom(Job job) {
+        Instant since = job.keptSince();
+        return since != null ? since : job.getCreatedAt();
+    }
+
+    /**
+     * Under the lock of {@link #delete}, so a job the cleanup has just deleted is not written back. An unpin starts
+     * the retention again: an old job does not go at the next cleanup.
+     */
     @Override
     public synchronized Optional<Job> pin(UUID id, boolean pinned) {
         Job job = index.get(id);
         if (job == null) {
             return Optional.empty();
+        }
+        if (job.isPinned() && !pinned) {
+            job.setUnpinnedAt(clock.instant());
         }
         job.setPinned(pinned);
         save(job);
@@ -121,13 +133,13 @@ public class FileJobRepository implements JobStore {
         files.deleteAll(id);
     }
 
-    /** Jobs finished more than the retention ago go with all their files, the pinned ones stay */
+    /** Jobs finished (or unpinned) more than the retention ago go with all their files, the pinned ones stay */
     @Scheduled(fixedDelayString = "PT1H", initialDelayString = "PT1M")
     public synchronized void cleanup() {
         Instant limit = clock.instant().minus(properties.retention());
         List<UUID> expired = index.values().stream()
                 .filter(job -> !job.isPinned())
-                .filter(job -> job.getFinishedAt() != null && job.getFinishedAt().isBefore(limit))
+                .filter(job -> job.keptSince() != null && job.keptSince().isBefore(limit))
                 .map(Job::getId)
                 .toList();
         expired.forEach(this::delete);

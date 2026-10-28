@@ -37,6 +37,8 @@ public class Job {
     private volatile UUID sourceJobId;
     /** Kept past the retention and not deleted until unpinned */
     private volatile boolean pinned;
+    /** The last unpin: the retention starts again from it */
+    private volatile Instant unpinnedAt;
 
     /** Not stored: only meaningful while RUNNING */
     private volatile Progress progress;
@@ -53,6 +55,18 @@ public class Job {
         this.params = Map.copyOf(params);
         this.seed = seed;
         this.createdAt = createdAt;
+    }
+
+    /**
+     * @return what the retention counts from: the finish, or the last unpin when later; null while pending
+     */
+    public Instant keptSince() {
+        Instant finished = finishedAt;
+        Instant unpinned = unpinnedAt;
+        if (finished == null || unpinned == null) {
+            return finished;
+        }
+        return unpinned.isAfter(finished) ? unpinned : finished;
     }
 
 }

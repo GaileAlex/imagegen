@@ -206,10 +206,22 @@ class FileJobRepositoryTest {
         // the pin is written down
         assertThat(restart().find(pinned.getId()).orElseThrow().isPinned()).isTrue();
 
+        // an unpin starts the 10 days again: the old job is not deleted at the next cleanup
         repository.pin(pinned.getId(), false);
         repository.cleanup();
 
+        assertThat(repository.find(pinned.getId())).isPresent();
+        assertThat(repository.findByUser(1, 50)).containsExactly(pinned);
+        assertThat(restart().find(pinned.getId()).orElseThrow().getUnpinnedAt()).isEqualTo(clock.instant());
+
+        clock.advance(Duration.ofDays(9));
+        repository.cleanup();
+        assertThat(repository.find(pinned.getId())).isPresent();
+
+        clock.advance(Duration.ofDays(1).plusMinutes(1));
+        repository.cleanup();
         assertThat(repository.find(pinned.getId())).isEmpty();
+        assertThat(files.result(pinned.getId(), "image/png")).doesNotExist();
     }
 
     @Test
@@ -226,8 +238,8 @@ class FileJobRepositoryTest {
         job.setStatus(JobStatus.DONE);
         repository.save(job);
         Path record = files.record(job.getId());
-        Files.writeString(record, Files.readString(record).replace(",\"pinned\":false", ""));
-        assertThat(Files.readString(record)).doesNotContain("pinned");
+        Files.writeString(record, Files.readString(record).replace(",\"pinned\":false", "").replace(",\"unpinnedAt\":null", ""));
+        assertThat(Files.readString(record)).doesNotContain("pinned").doesNotContain("unpinnedAt");
 
         assertThat(restart().find(job.getId()).orElseThrow().isPinned()).isFalse();
     }
