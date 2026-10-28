@@ -199,7 +199,7 @@ GPU before the job starts. While a job has the GPU, or the GPU instance fails, t
 
 | Part      | Content                                                                                            |
 |-----------|----------------------------------------------------------------------------------------------------|
-| `request` | JSON: `idea` (required, up to 1000 characters, any language), `videoModel` (a VIDEO mode), `seconds` (null = the default of the mode, clamped to its range), `frame` (true: the start frame is made by a picture model first), `orientation` (`landscape`/`portrait` of that frame), `sourceJobId` (the start picture is this finished image job of the user) |
+| `request` | JSON: `idea` (up to 1000 characters, any language; may be empty with a start picture: the model chooses the action from the picture), `videoModel` (a VIDEO mode), `seconds` (null = the default of the mode, clamped to its range), `frame` (true: the start frame is made by a picture model first), `orientation` (`landscape`/`portrait` of that frame), `sourceJobId` (the start picture is this finished image job of the user) |
 | `image`   | the start picture of the user (optional; ignored with `frame` or `sourceJobId`)                    |
 
 Three cases, by what the video starts from:
@@ -208,12 +208,17 @@ Three cases, by what the video starts from:
   written first, so the video continues exactly that frame (same people, clothes, place, light).
 - a picture (`image` or `sourceJobId`) -> `{"videoPrompt": "..."}`: the model looks at the picture (768 px) and
   animates what it shows; with `sourceJobId` of an IMAGE job its (English) prompt is given to the model as well.
+  Without an idea the model chooses the action itself: it lists the people and animals of the picture first, they do
+  something lively (a cat plays, a dog runs, a man laughs) and nobody new comes in; a place without them stays empty
+  (a camera move, the light, water, clouds, leaves), and the sentences of such a prompt on what is not there ("No
+  person enters the frame") are dropped, since the video model draws what they name.
 - neither, for a mode that runs from the text alone (LTX) -> `{"videoPrompt": "..."}` describing the looks too.
 
 The prompt style follows `prompt-style` of the mode: `WAN` (2-4 sentences of motion and camera, no sound) or `LTX`
 (one paragraph in time order with camera, light and sound). The prompts are English, so the translator leaves them.
-Errors: 400 `invalid_params` (empty or too long idea, not a VIDEO mode, a mode that needs a picture without one,
-`sourceJobId` not a finished image job of the user), 503 `idea_unavailable` (no model set, no answer, no JSON).
+Errors: 400 `invalid_params` (empty idea without a picture, too long idea, not a VIDEO mode, a mode that needs a
+picture without one, `sourceJobId` not a finished image job of the user), 503 `idea_unavailable` (no model set, no
+answer, no JSON).
 
 ## GPU state and unload
 

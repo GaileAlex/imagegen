@@ -24,8 +24,9 @@ import java.util.Map;
 
 /**
  * Writes the prompts of a video from a short idea: the start frame and the video together, or the video for a
- * given picture, or a video from the text alone. Nothing is queued: the page shows the prompts in its fields, the
- * user may change them and starts the generation as usual.
+ * given picture (the idea may be empty then: the model chooses what happens from the picture), or a video from the
+ * text alone. Nothing is queued: the page shows the prompts in its fields, the user may change them and starts the
+ * generation as usual.
  */
 @Slf4j
 @Service
@@ -49,9 +50,6 @@ public class PromptIdeaService {
     public PromptIdea write(long userId, String requestJson, byte[] image) {
         IdeaRequest request = parse(requestJson);
         String idea = request.idea() == null ? "" : request.idea().strip();
-        if (idea.isEmpty()) {
-            throw new InvalidParamsException("The idea is empty");
-        }
         if (idea.length() > MAX_IDEA_LENGTH) {
             throw new InvalidParamsException("The idea is longer than " + MAX_IDEA_LENGTH + " characters");
         }
@@ -71,17 +69,21 @@ public class PromptIdeaService {
         if (Boolean.TRUE.equals(request.frame())) {
             start = Start.FRAME;
         } else if (withPicture) {
-            start = Start.PICTURE;
+            // a picture is enough to go on: the model chooses the action itself
+            start = idea.isEmpty() ? Start.PICTURE_ONLY : Start.PICTURE;
         } else if (!model.needsImage()) {
             start = Start.TEXT;
         } else {
             throw new InvalidParamsException(model.id() + " needs a start picture or a frame");
         }
+        if (idea.isEmpty() && start != Start.PICTURE_ONLY) {
+            throw new InvalidParamsException("The idea is empty");
+        }
 
         String system = IdeaPrompts.system(start, model.promptStyle(), seconds, portrait);
-        String user = IdeaPrompts.user(idea, start == Start.PICTURE ? sourcePrompt(source) : null);
+        String user = IdeaPrompts.user(idea, start.seesPicture() ? sourcePrompt(source) : null);
         Map<String, Object> schema = IdeaPrompts.schema(start);
-        byte[] seen = start == Start.PICTURE ? small(picture) : null;
+        byte[] seen = start.seesPicture() ? small(picture) : null;
         long started = System.nanoTime();
         Map<String, String> answer = onGpu(system, user, seen, schema);
         String device = "GPU";
@@ -91,10 +93,18 @@ public class PromptIdeaService {
         }
         log.info("Prompt idea for {} ({}, {} s) of user {} written on the {} in {} ms", model.id(), start, seconds,
                 userId, device, (System.nanoTime() - started) / 1_000_000);
-        if (start == Start.PICTURE) {
+        if (start.seesPicture()) {
             log.debug("The idea model sees in the picture: {}", answer.get(IdeaPrompts.PICTURE));
         }
-        return new PromptIdea(answer.get(IdeaPrompts.FRAME_PROMPT), answer.get(IdeaPrompts.VIDEO_PROMPT));
+        String videoPrompt = answer.get(IdeaPrompts.VIDEO_PROMPT);
+        if (start == Start.PICTURE_ONLY) {
+            log.debug("The idea model sees alive: {}; chose: {}", answer.get(IdeaPrompts.LIVING),
+                    answer.get(IdeaPrompts.ACTION));
+            if (IdeaPrompts.nobodyIn(answer.get(IdeaPrompts.LIVING))) {
+                videoPrompt = IdeaPrompts.withoutAbsent(videoPrompt);
+            }
+        }
+        return new PromptIdea(answer.get(IdeaPrompts.FRAME_PROMPT), videoPrompt);
     }
 
     /**

@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +115,36 @@ class PromptIdeaServiceTest {
     }
 
     @Test
+    void withAPictureTheIdeaMayBeEmptyAndTheModelChoosesTheAction() throws IOException {
+        PromptIdea idea = service.write(1, "{\"idea\":\"  \",\"videoModel\":\"wan22-i2v\"}", png(640, 480));
+
+        assertThat(idea.videoPrompt()).isEqualTo("video text");
+        assertThat(writer.schemaFields).containsExactly("picture", "living", "action", "videoPrompt");
+        assertThat(writer.user).isEqualTo("No idea: choose the action yourself from the picture.");
+        // the rules of an idea are left out: their people walking in brought people into empty rooms
+        assertThat(writer.system).contains("There is no idea: you choose what happens")
+                .doesNotContain("the woman on the bed");
+        assertThat(writer.picture).isNotNull();
+    }
+
+    @Test
+    void anEmptyPlaceLosesTheSentencesOnWhatIsNotThere() throws IOException {
+        writer.answers.put("living", "None.");
+        writer.answers.put("videoPrompt", "The camera pans across the bed. No person enters the frame. "
+                + "The light dims! Nothing else moves. There are no sounds.");
+
+        PromptIdea idea = service.write(1, "{\"videoModel\":\"wan22-i2v\"}", png(640, 480));
+
+        assertThat(idea.videoPrompt()).isEqualTo("The camera pans across the bed. The light dims!");
+
+        // with someone in the picture the prompt is left as it is
+        writer.answers.put("living", "a man");
+        writer.answers.put("videoPrompt", "The man laughs. Nobody else is around.");
+        assertThat(service.write(1, "{\"videoModel\":\"wan22-i2v\"}", png(640, 480)).videoPrompt())
+                .isEqualTo("The man laughs. Nobody else is around.");
+    }
+
+    @Test
     void aPictureOfTheHistoryBringsItsEnglishPrompt() throws IOException {
         UUID sourceId = UUID.randomUUID();
         Job source = new Job(sourceId, 1, "a", "muse-txt2img", JobKind.IMAGE,
@@ -146,7 +177,11 @@ class PromptIdeaServiceTest {
     void badRequestsAreRefusedBeforeTheModelIsAsked() {
         assertThatThrownBy(() -> service.write(1, request("muse-txt2img", 5, true, null, null), null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Not a video model");
-        assertThatThrownBy(() -> service.write(1, "{\"idea\":\"  \",\"videoModel\":\"ltx25-i2v\"}", null))
+        // without a picture there is nothing to go on
+        assertThatThrownBy(() -> service.write(1, "{\"idea\":\"  \",\"videoModel\":\"ltx25-i2v\",\"frame\":true}",
+                null))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("empty");
+        assertThatThrownBy(() -> service.write(1, "{\"videoModel\":\"ltx25-nsfw-i2v\"}", null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("empty");
         assertThatThrownBy(() -> service.write(1, "{\"idea\":\"" + "a".repeat(1001)
                 + "\",\"videoModel\":\"ltx25-i2v\"}", null))
@@ -191,6 +226,8 @@ class PromptIdeaServiceTest {
         boolean gpu;
         boolean gpuFails;
         final List<String> devices = new ArrayList<>();
+        /** answers of the fields given by the test */
+        final Map<String, String> answers = new HashMap<>();
 
         @Override
         public boolean hasGpu() {
@@ -210,7 +247,8 @@ class PromptIdeaServiceTest {
             this.picture = picture;
             this.schemaFields = (List<String>) schema.get("required");
             Map<String, String> answer = new LinkedHashMap<>();
-            schemaFields.forEach(field -> answer.put(field, field.replace("Prompt", "") + " text"));
+            schemaFields.forEach(field -> answer.put(field,
+                    answers.getOrDefault(field, field.replace("Prompt", "") + " text")));
             return answer;
         }
     }
