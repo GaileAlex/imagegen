@@ -11,7 +11,8 @@ import java.time.Duration;
  * @param idleUnload      the model is unloaded this long after the last job with nothing queued
  * @param presenceTimeout an open page that sent no heartbeat for this long counts as gone
  * @param retention       finished jobs and their files are deleted after this
- * @param jobTimeout      a job running longer is interrupted and fails
+ * @param jobTimeout      a run of ComfyUI longer than this is interrupted and fails, however lively
+ * @param stallTimeout    a run of ComfyUI that reports nothing this long has hung: interrupted, failed
  */
 @ConfigurationProperties(prefix = "imagegen")
 public record ImagegenProperties(
@@ -20,6 +21,7 @@ public record ImagegenProperties(
         Duration idleUnload,
         Duration presenceTimeout,
         Duration retention,
-        Duration jobTimeout
+        Duration jobTimeout,
+        Duration stallTimeout
 ) {
 }

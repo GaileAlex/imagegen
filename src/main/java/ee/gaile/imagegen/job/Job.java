@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -39,11 +40,20 @@ public class Job {
     private volatile boolean pinned;
     /** The last unpin: the retention starts again from it */
     private volatile Instant unpinnedAt;
+    /**
+     * A long video: its scenes in order, made one after another and joined (the prompts are null until the job writes
+     * its storyboard); null for a single clip and for the other kinds
+     */
+    private volatile List<Scene> scenes;
 
     /** Not stored: only meaningful while RUNNING */
     private volatile Progress progress;
     /** Set by a cancel of the running job, before ComfyUI is interrupted */
     private volatile boolean cancelRequested;
+    /** Scenes of a long video made so far; not stored: a long video does not go on after a restart */
+    private volatile int scenesDone;
+    /** Failed tries of the current step of a long video: the first failure is tried again */
+    private volatile int stepFailures;
 
     public Job(UUID id, long userId, String userName, String model, JobKind kind, Map<String, Object> params,
                long seed, Instant createdAt) {
@@ -67,6 +77,11 @@ public class Job {
             return finished;
         }
         return unpinned.isAfter(finished) ? unpinned : finished;
+    }
+
+    /** A long video, made of scenes */
+    public boolean hasScenes() {
+        return scenes != null;
     }
 
 }

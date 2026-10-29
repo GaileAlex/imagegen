@@ -1,9 +1,11 @@
 package ee.gaile.imagegen.comfy;
 
+import ee.gaile.imagegen.job.Deadline;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobFailedException;
 import ee.gaile.imagegen.job.JobResult;
 import ee.gaile.imagegen.job.MutableClock;
+import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.model.TestCatalogue;
 import ee.gaile.imagegen.model.workflow.WorkflowRepository;
 import ee.gaile.imagegen.service.JobFactory;
@@ -94,8 +96,8 @@ class ComfyUiGatewayTest {
         return out.toByteArray();
     }
 
-    private Instant later() {
-        return Instant.now().plusSeconds(30);
+    private Deadline later() {
+        return new Deadline(Instant.now().plusSeconds(30), Duration.ofMinutes(10));
     }
 
     @Test
@@ -147,8 +149,9 @@ class ComfyUiGatewayTest {
     @Test
     void wanKeepsTheFaceWithTheStartImageAsTheLastFrame() {
         var template = new WorkflowRepository(MAPPER).get("wan22-i2v");
-        Job kept = job("wan22-i2v", params("prompt", "walks"), null);
-        Job free = job("wan22-i2v", params("prompt", "walks", "keepFace", false), null);
+        Job kept = job("wan22-i2v", params("prompt", "walks", "keepFace", true), null);
+        // off by default: it holds the person to the pose of the picture
+        Job free = job("wan22-i2v", params("prompt", "walks"), null);
 
         ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(kept));
         ObjectNode plain = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(free));
@@ -163,7 +166,7 @@ class ComfyUiGatewayTest {
     @Test
     void ltxKeepsTheFaceWithGuideFramesOnBothStages() {
         var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
-        Job job = job("ltx25-nsfw-i2v", params("prompt", "walks", "seconds", 8), null);
+        Job job = job("ltx25-nsfw-i2v", params("prompt", "walks", "seconds", 8, "keepFace", true), null);
 
         ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
 
@@ -194,7 +197,7 @@ class ComfyUiGatewayTest {
     void ltxFromTheTextAloneHasNoFaceToKeep() {
         var template = new WorkflowRepository(MAPPER).get("ltx25-i2v");
         Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-i2v"),
-                params("prompt", "walks"), null, false);
+                params("prompt", "walks", "keepFace", true), null, false);
 
         ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
 
@@ -350,8 +353,41 @@ class ComfyUiGatewayTest {
                 MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE + "/interrupt")).andExpect(method(HttpMethod.POST)).andRespond(withSuccess());
 
-        assertThatThrownBy(() -> gateway.run(job, sink, Instant.now().minusSeconds(1)))
+        Deadline past = new Deadline(Instant.now().minusSeconds(1), Duration.ofMinutes(10));
+
+        assertThatThrownBy(() -> gateway.run(job, sink, past))
                 .isInstanceOf(JobFailedException.class).hasMessage("timeout");
+        server.verify();
+    }
+
+    @Test
+    void aRunThatReportsNothingForTheStallTimeIsInterrupted() {
+        events.connected = true;
+        Job job = job("muse-txt2img", params("prompt", "x"), null);
+        server.expect(requestTo(BASE + "/prompt")).andRespond(withSuccess("{\"prompt_id\":\"p1\"}",
+                MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/interrupt")).andExpect(method(HttpMethod.POST)).andRespond(withSuccess());
+        // far from the fixed time, but the socket is up and stays silent
+        Deadline silent = new Deadline(Instant.now().plusSeconds(30), Duration.ofMillis(50));
+
+        assertThatThrownBy(() -> gateway.run(job, sink, silent))
+                .isInstanceOf(JobFailedException.class).hasMessageStartingWith("timeout: ComfyUI reported nothing");
+        server.verify();
+    }
+
+    @Test
+    void withoutTheSocketTheSilenceDoesNotEndTheRun() {
+        Job job = job("muse-txt2img", params("prompt", "x"), null);
+        server.expect(requestTo(BASE + "/prompt")).andRespond(withSuccess("{\"prompt_id\":\"p1\"}",
+                MediaType.APPLICATION_JSON));
+        // the socket is down: /history tells the end, the silence is no sign of a hang
+        String done = "{\"p1\":{\"status\":{\"status_str\":\"error\",\"completed\":true,\"messages\":"
+                + "[[\"execution_error\",{\"exception_message\":\"boom\"}]]}}}";
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        Deadline silent = new Deadline(Instant.now().plusSeconds(30), Duration.ofMillis(1));
+
+        assertThatThrownBy(() -> gateway.run(job, sink, silent)).hasMessage("boom");
         server.verify();
     }
 
@@ -418,8 +454,91 @@ class ComfyUiGatewayTest {
                 MediaType.APPLICATION_JSON));
         other.expect(requestTo(BASE + "/interrupt")).andRespond(withSuccess());
 
-        assertThatThrownBy(() -> slow.run(job("muse-txt2img", params("prompt", "x"), null), sink, clock.instant()))
+        assertThatThrownBy(() -> slow.run(job("muse-txt2img", params("prompt", "x"), null), sink,
+                new Deadline(clock.instant(), Duration.ofMinutes(10))))
                 .hasMessage("timeout");
+    }
+
+    private Job longVideo() {
+        Job job = job("ltx25-i2v", params("prompt", "a story", "seconds", 20, "seed", 5, "orientation", "portrait"),
+                null);
+        job.setScenes(List.of(new Scene(10, "he plays", null), new Scene(10, "he stands up", null)));
+        return job;
+    }
+
+    @Test
+    void aSceneStartsFromTheTailOfTheOneBeforeAndKeepsItsOwn() throws IOException {
+        Job job = longVideo();
+        Files.write(files.tail(job.getId()), new byte[]{1});
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andExpect(content().string(containsString(job.getId() + ".tail.png")))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/prompt"))
+                .andExpect(jsonPath("$.prompt['6'].inputs.image").value(job.getId() + ".tail.png"))
+                .andExpect(jsonPath("$.prompt['8'].inputs.text").value("he stands up"))
+                // 17 frames of the tail + 10 s at 24 fps, the seed of the second scene
+                .andExpect(jsonPath("$.prompt['11'].inputs.length").value(257))
+                .andExpect(jsonPath("$.prompt['16'].inputs.noise_seed").value(6))
+                .andExpect(jsonPath("$.prompt['12'].inputs.bypass").value(false))
+                .andExpect(jsonPath("$.prompt['190'].class_type").value("ImageFromBatch"))
+                .andExpect(jsonPath("$.prompt['190'].inputs.batch_index").value(-17))
+                .andExpect(jsonPath("$.prompt['191'].class_type").value("SaveAnimatedPNG"))
+                .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
+        String done = """
+                {"p1": {"status": {"status_str": "success", "completed": true, "messages": []},
+                        "outputs": {"31": {"images": [{"filename": "s.mp4", "subfolder": "", "type": "output"}]},
+                                    "191": {"images": [{"filename": "t.png", "subfolder": "", "type": "output"}]}}}}""";
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/view?filename=s.mp4")))
+                .andRespond(withSuccess(new byte[]{7, 7}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(containsString("/view?filename=t.png")))
+                .andRespond(withSuccess(new byte[]{9, 9, 9}, MediaType.IMAGE_PNG));
+        server.expect(requestTo(BASE + "/history")).andRespond(withSuccess());
+
+        gateway.runScene(job, 2, sink, later());
+
+        assertThat(files.scene(job.getId(), 2)).hasBinaryContent(new byte[]{7, 7});
+        assertThat(files.tail(job.getId())).hasBinaryContent(new byte[]{9, 9, 9});
+        server.verify();
+    }
+
+    @Test
+    void theScenesAreJoinedWithoutTheFramesTheyRepeat() throws IOException {
+        Job job = longVideo();
+        Files.write(files.scene(job.getId(), 1), new byte[]{1});
+        Files.write(files.scene(job.getId(), 2), new byte[]{2});
+        Files.write(files.tail(job.getId()), new byte[]{3});
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andExpect(content().string(containsString(job.getId() + ".scene1.mp4")))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andExpect(content().string(containsString(job.getId() + ".scene2.mp4")))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/prompt"))
+                .andExpect(jsonPath("$.prompt['100'].inputs.file").value(job.getId() + ".scene1.mp4"))
+                .andExpect(jsonPath("$.prompt['201'].class_type").value("Video Slice"))
+                .andExpect(jsonPath("$.prompt['201'].inputs.start_time").value(17 / 24.0))
+                .andExpect(jsonPath("$.prompt['300'].inputs['videos.video0'][0]").value("100"))
+                .andExpect(jsonPath("$.prompt['300'].inputs['videos.video1'][0]").value("201"))
+                .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
+        String done = HISTORY_DONE.formatted("301",
+                "{\"images\":[{\"filename\":\"j.mp4\",\"subfolder\":\"\",\"type\":\"output\"}]}");
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/view?filename=j.mp4")))
+                .andRespond(withSuccess(new byte[]{5, 5, 5, 5}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(BASE + "/history")).andRespond(withSuccess());
+
+        JobResult result = gateway.joinScenes(job, sink, later());
+
+        assertThat(result.contentType()).isEqualTo("video/mp4");
+        assertThat(result.size()).isEqualTo(4);
+        assertThat(result.durationSeconds()).isEqualTo(20.0);
+        assertThat(List.of(result.width(), result.height())).containsExactly(704, 1216);
+        assertThat(files.scene(job.getId(), 1)).doesNotExist();
+        assertThat(files.tail(job.getId())).doesNotExist();
+        server.verify();
     }
 
     /** A websocket that is down unless a test says otherwise */

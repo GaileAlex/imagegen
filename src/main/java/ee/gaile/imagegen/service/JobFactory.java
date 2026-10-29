@@ -2,6 +2,7 @@ package ee.gaile.imagegen.service;
 
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobKind;
+import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.model.ModelDefinition;
 import ee.gaile.imagegen.model.ParamDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,6 +12,7 @@ import java.awt.Dimension;
 import java.time.Clock;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -28,7 +30,10 @@ public class JobFactory {
     public static final long MAX_SEED = Integer.MAX_VALUE;
     /** Service param of a video made from the text alone: the workflow skips its start image */
     public static final String TEXT_ONLY = "textOnly";
-    private static final int MAX_TEXT_LENGTH = 4000;
+    /** The scenes of a 30 s video written out take ~5000 characters */
+    private static final int MAX_TEXT_LENGTH = 12000;
+    /** A scene shorter than this is mostly the frames it starts from */
+    static final int MIN_SCENE_SECONDS = 2;
     /** Float params are typed by hand, so a step of 0.1 is not checked to the last bit */
     private static final double EPSILON = 1e-9;
 
@@ -74,8 +79,55 @@ public class JobFactory {
             params.put("width", photoSize.width);
             params.put("height", photoSize.height);
         }
+        List<Scene> scenes = model.kind() == JobKind.VIDEO ? scenes(model, params) : null;
         long seed = (Long) params.get("seed");
-        return new Job(id, userId, userName, model.id(), model.kind(), params, seed, clock.instant());
+        Job job = new Job(id, userId, userName, model.id(), model.kind(), params, seed, clock.instant());
+        job.setScenes(scenes);
+        return job;
+    }
+
+    /**
+     * A long video: the scenes written out in the prompt (their seconds become the length), or even scenes whose
+     * prompts the job writes itself when the length is above one clip.
+     *
+     * @return null for a single clip
+     */
+    private List<Scene> scenes(ModelDefinition model, Map<String, Object> params) {
+        List<Scene> marked = ScenePrompts.parse((String) params.get("prompt"));
+        if (marked.size() == 1) {
+            // one scene is a plain clip
+            params.put("prompt", marked.getFirst().prompt());
+        }
+        if (marked.size() > 1) {
+            int total = 0;
+            for (Scene scene : marked) {
+                if (scene.seconds() < MIN_SCENE_SECONDS || scene.seconds() > model.sceneSeconds()) {
+                    throw new InvalidParamsException("A scene lasts " + MIN_SCENE_SECONDS + " to "
+                            + model.sceneSeconds() + " seconds");
+                }
+                total += scene.seconds();
+            }
+            int longest = maxSeconds(model);
+            if (total > longest) {
+                throw new InvalidParamsException("The scenes last " + total + " s, longer than " + longest + " s");
+            }
+            params.put("seconds", total);
+            return List.copyOf(marked);
+        }
+        if (!(params.get("seconds") instanceof Number seconds) || seconds.intValue() <= model.clipSeconds()) {
+            return null;
+        }
+        return ScenePrompts.split(seconds.intValue(), model.sceneSeconds()).stream()
+                .map(length -> new Scene(length, null, null))
+                .toList();
+    }
+
+    private static int maxSeconds(ModelDefinition model) {
+        return model.params().stream()
+                .filter(param -> param.name().equals("seconds") && param.max() != null)
+                .map(param -> param.max().intValue())
+                .findFirst()
+                .orElse(model.clipSeconds());
     }
 
     /**

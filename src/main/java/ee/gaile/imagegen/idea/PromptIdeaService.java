@@ -8,7 +8,9 @@ import ee.gaile.imagegen.job.JobQueue;
 import ee.gaile.imagegen.model.ModelCatalogue;
 import ee.gaile.imagegen.model.ModelDefinition;
 import ee.gaile.imagegen.model.ParamDefinition;
+import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.service.InvalidParamsException;
+import ee.gaile.imagegen.service.ScenePrompts;
 import ee.gaile.imagegen.service.SourceImages;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,13 +22,15 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Writes the prompts of a video from a short idea: the start frame and the video together, or the video for a
  * given picture (the idea may be empty then: the model chooses what happens from the picture), or a video from the
  * text alone. Nothing is queued: the page shows the prompts in its fields, the user may change them and starts the
- * generation as usual.
+ * generation as usual. A video longer than one clip gets its scenes written out in the video prompt (see
+ * {@link ScenePrompts}), all from one answer, so they tell one story.
  */
 @Slf4j
 @Service
@@ -80,9 +84,16 @@ public class PromptIdeaService {
             throw new InvalidParamsException("The idea is empty");
         }
 
-        String system = IdeaPrompts.system(start, model.promptStyle(), seconds, portrait);
+        // a video longer than one clip is made of scenes: their prompts come from one storyboard answer
+        List<Integer> lengths = seconds > model.clipSeconds()
+                ? ScenePrompts.split(seconds, model.sceneSeconds()) : null;
+        String system = lengths != null
+                ? IdeaPrompts.storyboard(start, model.promptStyle(), lengths, portrait)
+                : IdeaPrompts.system(start, model.promptStyle(), seconds, portrait);
         String user = IdeaPrompts.user(idea, start.seesPicture() ? sourcePrompt(source) : null);
-        Map<String, Object> schema = IdeaPrompts.schema(start);
+        Map<String, Object> schema = lengths != null
+                ? IdeaPrompts.storyboardSchema(start, model.promptStyle(), lengths.size())
+                : IdeaPrompts.schema(start);
         byte[] seen = start.seesPicture() ? small(picture) : null;
         long started = System.nanoTime();
         Map<String, String> answer = onGpu(system, user, seen, schema);
@@ -95,6 +106,12 @@ public class PromptIdeaService {
                 userId, device, (System.nanoTime() - started) / 1_000_000);
         if (start.seesPicture()) {
             log.debug("The idea model sees in the picture: {}", answer.get(IdeaPrompts.PICTURE));
+        }
+        if (lengths != null) {
+            log.debug("The storyboard: {} | {}", answer.get(IdeaPrompts.CAST), answer.get(IdeaPrompts.STORY));
+            boolean empty = start == Start.PICTURE_ONLY && IdeaPrompts.nobodyIn(answer.get(IdeaPrompts.LIVING));
+            List<Scene> scenes = IdeaPrompts.scenes(answer, lengths, empty);
+            return new PromptIdea(answer.get(IdeaPrompts.FRAME_PROMPT), ScenePrompts.format(scenes));
         }
         String videoPrompt = answer.get(IdeaPrompts.VIDEO_PROMPT);
         if (start == Start.PICTURE_ONLY) {
@@ -158,7 +175,7 @@ public class PromptIdeaService {
     }
 
     /** The English prompt a generated picture was made from: the best hint of what it shows */
-    private static String sourcePrompt(Job source) {
+    static String sourcePrompt(Job source) {
         if (source == null || source.getKind() != JobKind.IMAGE) {
             return null;
         }
@@ -169,7 +186,7 @@ public class PromptIdeaService {
         return source.getParams().get("prompt") instanceof String prompt ? prompt : null;
     }
 
-    private static byte[] small(byte[] picture) {
+    static byte[] small(byte[] picture) {
         BufferedImage image = InputImages.limitSide(InputImages.decode(picture), PICTURE_SIDE);
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ImageIO.write(image, "jpg", out);

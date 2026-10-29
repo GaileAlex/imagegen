@@ -27,6 +27,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * user keep their order (a picture runs before the video waiting for it). A single worker thread takes the next job
  * and runs it through ComfyUI; the unload of the model happens under the same lock, so it never cuts a job off.
  * Between the jobs a {@link GpuGuest} may borrow the GPU: the next job waits until it is done and has left.
+ * A long video runs one scene per turn and goes back into the queue in between (RUNNING, phase WAITING), so it holds
+ * the other users up by one scene at most, as any job; a failed step of it is tried once more.
  */
 @Slf4j
 @Component
@@ -40,6 +42,7 @@ public class JobQueue {
     private final ImagegenProperties properties;
     private final Clock clock;
     private final GpuGuest guest;
+    private final Storyboards storyboards;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition jobQueued = lock.newCondition();
@@ -115,7 +118,12 @@ public class JobQueue {
             if (queued.remove(job)) {
                 job.setStatus(JobStatus.CANCELLED);
                 job.setFinishedAt(clock.instant());
+                job.setProgress(null);
                 repository.save(job);
+                // a long video between two scenes has some made already
+                if (job.hasScenes()) {
+                    gateway.discardScenes(job);
+                }
                 log.info("Job {} cancelled in the queue", job.getId());
                 return true;
             }
@@ -263,8 +271,13 @@ public class JobQueue {
                 loaded = true;
                 lastModel = job.getModel();
                 job.setStatus(JobStatus.RUNNING);
-                job.setStartedAt(clock.instant());
-                job.setProgress(Progress.LOADING);
+                // a long video back for its next scene started with its first one
+                if (job.getStartedAt() == null) {
+                    job.setStartedAt(clock.instant());
+                }
+                job.setProgress(job.hasScenes()
+                        ? Progress.LOADING.inScene(nextScene(job), job.getScenes().size())
+                        : Progress.LOADING);
                 repository.save(job);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -280,17 +293,20 @@ public class JobQueue {
     }
 
     private void execute(Job job) {
-        Instant deadline = clock.instant().plus(properties.jobTimeout());
+        Deadline deadline = new Deadline(clock.instant().plus(properties.jobTimeout()), properties.stallTimeout());
         JobResult result = null;
         String error = null;
         try {
-            if (job.getSourceJobId() != null) {
-                sourceInputs.prepare(job);
+            // a long video back for its next scene has its start image and translations already
+            if (job.getScenesDone() == 0) {
+                if (job.getSourceJobId() != null) {
+                    sourceInputs.prepare(job);
+                }
+                translate(job);
             }
-            translate(job);
             // A cancel during the translation: ComfyUI never gets the job
             if (!job.isCancelRequested()) {
-                result = gateway.run(job, job::setProgress, deadline);
+                result = job.hasScenes() ? step(job, deadline) : gateway.run(job, job::setProgress, deadline);
             }
         } catch (JobFailedException e) {
             error = e.getMessage();
@@ -301,6 +317,12 @@ public class JobQueue {
 
         lock.lock();
         try {
+            if (job.hasScenes() && againLater(job, result, error)) {
+                return;
+            }
+            if (job.hasScenes() && result == null) {
+                gateway.discardScenes(job);
+            }
             if (job.isCancelRequested()) {
                 job.setStatus(JobStatus.CANCELLED);
             } else if (result != null) {
@@ -324,9 +346,89 @@ public class JobQueue {
                 Duration.between(job.getStartedAt(), job.getFinishedAt()), error != null ? ": " + error : "");
     }
 
-    /** On the CPU, so the GPU model of the previous job may stay loaded meanwhile */
+    /**
+     * A long video that is not done goes back into the queue for its next step: after a scene that is not the last,
+     * or after its first failure (the step is tried again). Under the lock.
+     *
+     * @return true when the job waits in the queue again
+     */
+    private boolean againLater(Job job, JobResult result, String error) {
+        if (job.isCancelRequested() || result != null) {
+            return false;
+        }
+        if (error != null) {
+            if (job.getStepFailures() > 0) {
+                return false;
+            }
+            job.setStepFailures(1);
+            log.warn("Job {}: scene {} failed ({}), it is tried once more", job.getId(), job.getScenesDone() + 1,
+                    error);
+        }
+        int count = job.getScenes().size();
+        job.setProgress(new Progress(Progress.Phase.WAITING, 0, 0).inScene(nextScene(job), count));
+        running = null;
+        lastActivity = clock.instant();
+        queued.addLast(job);
+        repository.save(job);
+        log.info("Job {}: {} of {} scenes made, back in the queue", job.getId(), job.getScenesDone(), count);
+        return true;
+    }
+
+    /** The scene of a long video its next turn makes; the last one again when only the join is left */
+    private static int nextScene(Job job) {
+        return Math.min(job.getScenesDone() + 1, job.getScenes().size());
+    }
+
+    /**
+     * One turn of a long video: its storyboard first if the user gave no scenes, then its next scene; after the last
+     * scene the join.
+     *
+     * @return the result after the join, null while scenes are left
+     */
+    private JobResult step(Job job, Deadline deadline) {
+        int count = job.getScenes().size();
+        if (job.getScenes().getFirst().prompt() == null) {
+            job.setProgress(new Progress(Progress.Phase.STORYBOARD, 0, 0).inScene(1, count));
+            // the language model needs the GPU; the previous job may have left its model there
+            try {
+                gateway.free();
+            } catch (RuntimeException e) {
+                log.warn("Unload for the storyboard failed: {}", e.getMessage());
+            }
+            try {
+                job.setScenes(List.copyOf(storyboards.write(job)));
+            } finally {
+                guest.leaveGpu();
+            }
+            repository.save(job);
+            log.info("Job {}: storyboard of {} scenes written", job.getId(), count);
+        }
+        translateScenes(job);
+        int scene = job.getScenesDone() + 1;
+        // all made: a join that failed is tried again on its own
+        if (scene <= count) {
+            gateway.runScene(job, scene, progress -> job.setProgress(progress.inScene(scene, count)), deadline);
+            job.setScenesDone(scene);
+            job.setStepFailures(0);
+            if (scene < count) {
+                return null;
+            }
+        }
+        Progress joining = new Progress(Progress.Phase.JOINING, 0, 0).inScene(count, count);
+        job.setProgress(joining);
+        // the join has no sampler steps to report
+        return gateway.joinScenes(job, progress -> job.setProgress(joining), deadline);
+    }
+
+    /**
+     * On the CPU, so the GPU model of the previous job may stay loaded meanwhile. The prompt of a long video is not
+     * translated: its scenes are, or the language model writes them in English.
+     */
     private void translate(Job job) {
         Map<String, String> texts = PromptTranslator.cyrillicTexts(job.getParams());
+        if (job.hasScenes()) {
+            texts.remove("prompt");
+        }
         if (texts.isEmpty()) {
             return;
         }
@@ -335,6 +437,28 @@ public class JobQueue {
         job.setProgress(Progress.LOADING);
         repository.save(job);
         log.info("Job {}: translated {}", job.getId(), job.getTranslations().keySet());
+    }
+
+    /** The scenes typed with Cyrillic in them, once */
+    private void translateScenes(Job job) {
+        List<Scene> scenes = new ArrayList<>(job.getScenes());
+        boolean changed = false;
+        for (int i = 0; i < scenes.size(); i++) {
+            Scene scene = scenes.get(i);
+            Map<String, String> texts = PromptTranslator.cyrillicTexts(Map.of("prompt", scene.prompt()));
+            if (scene.english() == null && !texts.isEmpty()) {
+                Progress phase = job.getProgress();
+                job.setProgress(Progress.TRANSLATING.inScene(i + 1, scenes.size()));
+                scenes.set(i, scene.withEnglish(translator.translate(texts).get("prompt")));
+                job.setProgress(phase);
+                changed = true;
+            }
+        }
+        if (changed) {
+            job.setScenes(List.copyOf(scenes));
+            repository.save(job);
+            log.info("Job {}: scenes translated", job.getId());
+        }
     }
 
     /**

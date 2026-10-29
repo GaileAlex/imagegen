@@ -44,7 +44,11 @@ imagegen:
   # The page sends a heartbeat every 60 s
   presence-timeout: 150s
   retention: 10d
-  job-timeout: 15m
+  # A job that runs but stays silent this long has hung: ComfyUI reports every step of a sampler. A slow job goes on:
+  # LTX 12 s with keepFace once spilled out of the VRAM and took over 15 min at ~50 W (2026-10-28)
+  stall-timeout: 10m
+  # A guard over all of one run, however lively
+  job-timeout: 60m
   # Russian prompts go to the models in English. The CPU instance of Ollama of the CV project: the GPU belongs to
   # ComfyUI; the model leaves memory with the unload of the GPU model
   translator:
@@ -60,7 +64,8 @@ imagegen:
     gpu-url: ${IDEA_GPU_URL:http://cv-ollama:11434}
     url: ${TRANSLATOR_URL:http://cv-ollama-cpu:11434}
     model: huihui_ai/gemma-4-abliterated:26b
-    timeout: 3m
+    # the storyboard of a 30 s video is ~1500 tokens: ~3 min at 9.6 tok/s when the CPU has to write it
+    timeout: 8m
     # it takes most of the card: no longer than a second variant needs
     gpu-keep-alive: 3m
     keep-alive: 15m
@@ -140,12 +145,15 @@ imagegen:
       description: Video from a start image, lively motion, no sound; the face of a real person may drift (Wan 2.2 keeps it better). 832x480 (16 fps).
       typical-seconds: 160
       prompt-style: WAN
+      clip-seconds: 6
+      scene-seconds: 5
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
-        - { name: seconds, type: INT, default: '5', min: 2, max: 6 }
+        # a chain of Wan scenes blurs and shifts its colours from ~17 s on (test 2026-10-29); LTX holds 30 s
+        - { name: seconds, type: INT, default: '5', min: 2, max: 20 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
-        - { name: keepFace, type: BOOL, default: 'true' }
+        - { name: keepFace, type: BOOL, default: 'false' }
         - { name: seed, type: SEED }
     - id: wan22-i2v
       kind: VIDEO
@@ -153,12 +161,14 @@ imagegen:
       description: Video from a start image that keeps the face of a real person best; calmer motion than Fast Move, no sound. 832x480 (16 fps).
       typical-seconds: 145
       prompt-style: WAN
+      clip-seconds: 6
+      scene-seconds: 5
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
-        - { name: seconds, type: INT, default: '5', min: 2, max: 6 }
+        - { name: seconds, type: INT, default: '5', min: 2, max: 20 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
-        - { name: keepFace, type: BOOL, default: 'true' }
+        - { name: keepFace, type: BOOL, default: 'false' }
         - { name: seed, type: SEED }
     - id: ltx25-i2v
       kind: VIDEO
@@ -166,13 +176,16 @@ imagegen:
       description: Video with sound from a text, or from a start image when one is given. 1216x704 (24 fps).
       typical-seconds: 115
       prompt-style: LTX
+      clip-seconds: 12
+      # 10 s plus the 17 frames it starts from stay below a plain 12 s clip in the VRAM
+      scene-seconds: 10
       image-optional: true
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
-        - { name: seconds, type: INT, default: '5', min: 2, max: 12 }
+        - { name: seconds, type: INT, default: '5', min: 2, max: 30 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
-        - { name: keepFace, type: BOOL, default: 'true' }
+        - { name: keepFace, type: BOOL, default: 'false' }
         - { name: seed, type: SEED }
     - id: ltx25-nsfw-i2v
       kind: VIDEO
@@ -180,11 +193,14 @@ imagegen:
       description: LTX 2.5 with NSFW fine-tunes merged in, for nude and explicit scenes (the plain LTX blurs and dodges them). Sound, 1216x704 (24 fps); from a text or a start image.
       typical-seconds: 150
       prompt-style: LTX
+      clip-seconds: 12
+      # 10 s plus the 17 frames it starts from stay below a plain 12 s clip in the VRAM
+      scene-seconds: 10
       image-optional: true
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
-        - { name: seconds, type: INT, default: '5', min: 2, max: 12 }
+        - { name: seconds, type: INT, default: '5', min: 2, max: 30 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
-        - { name: keepFace, type: BOOL, default: 'true' }
+        - { name: keepFace, type: BOOL, default: 'false' }
         - { name: seed, type: SEED }

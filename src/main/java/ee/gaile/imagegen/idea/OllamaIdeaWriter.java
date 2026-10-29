@@ -25,6 +25,9 @@ import java.util.Map;
 @Component
 class OllamaIdeaWriter implements IdeaWriter, GpuGuest {
 
+    /** Well above the ~1500 tokens of the longest storyboard, below the context of 4096 with its ~1300 of prompt */
+    static final int MAX_ANSWER_TOKENS = 2500;
+
     private final IdeaProperties properties;
     private final ObjectMapper mapper;
     private final RestClient gpuClient;
@@ -61,7 +64,9 @@ class OllamaIdeaWriter implements IdeaWriter, GpuGuest {
                 "think", false,
                 "keep_alive", (onGpu ? properties.gpuKeepAlive() : properties.keepAlive()).toSeconds() + "s",
                 "format", schema,
-                "options", Map.of("temperature", properties.temperature()),
+                // the storyboard of 30 s is ~1500 tokens; once in six a long answer ran on until the 4096 of the
+                // context and broke off as JSON: it ends sooner so, and the caller tries again
+                "options", Map.of("temperature", properties.temperature(), "num_predict", MAX_ANSWER_TOKENS),
                 "messages", List.of(Map.of("role", "system", "content", system), userMessage));
         JsonNode answer;
         try {

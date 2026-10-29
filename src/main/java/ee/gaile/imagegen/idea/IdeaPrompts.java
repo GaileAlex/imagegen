@@ -1,8 +1,10 @@
 package ee.gaile.imagegen.idea;
 
+import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.model.config.VideoPromptStyle;
 import lombok.experimental.UtilityClass;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -26,6 +28,14 @@ class IdeaPrompts {
     static final String LIVING = "living";
     /** The action the model chose for a picture without an idea, written before the video prompt; not returned */
     static final String ACTION = "action";
+    /** A long video: who is in it, with the phrases every scene calls them by; not returned */
+    static final String CAST = "cast";
+    /** A long video: the place and the light, the same in every scene; not returned */
+    static final String PLACE = "place";
+    /** A long video with sound: the background sound of every scene; not returned */
+    static final String SOUND = "sound";
+    /** A long video: the plan of the whole, written before its scenes; not returned */
+    static final String STORY = "story";
 
     private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?])\\s+");
     /** A sentence on what is not there: "No person enters the frame.", "Nothing else moves." */
@@ -117,8 +127,9 @@ class IdeaPrompts {
             About one action per 2-3 seconds. The looks are already in the picture: name the people briefly ("the \
             woman in the red coat") so it is clear who is who, without describing the whole picture again.""";
 
+    // longer clips get longer prompts: 5 s 110-170 words, 12 s 180-240
     private static final String LTX = """
-            one flowing paragraph of 80-180 words for a %d-second clip with sound, present tense, in the order \
+            one flowing paragraph of %d-%d words for a %d-second clip with sound, present tense, in the order \
             things happen: the main action first, then the movements and gestures, the expressions, %sthe \
             background, the camera (angle, movement), the light, and the sound (ambient noise, music, or speech in \
             quotes if someone speaks). About one action per 2-3 seconds.""";
@@ -127,15 +138,167 @@ class IdeaPrompts {
             The prompts are the bare text for the models: never mention the model, the clip length, the word count \
             or these instructions in them.""";
 
+    // ---- a long video: one answer with all the scenes, each starting from the last frames of the one before ----
+
+    private static final String STORYBOARD_FRAME = """
+            First a picture model draws the start frame from "framePrompt", then a video model animates exactly that \
+            frame scene by scene. "framePrompt" is a %s still photograph of the first moment of the video: 60-120 \
+            words about the subject, looks, clothes, the pose at that moment, the place, the light, the shot \
+            (close-up, medium, wide) and the style (a realistic photo unless the idea asks for another style); only \
+            what is seen in the photo. The people and the place of the video are those of this photograph.
+            """;
+
+    private static final String STORYBOARD_PICTURE = """
+            The video starts from the picture the user attached. First write in "picture" 1-3 sentences on what the \
+            picture really shows: the people (or that there is nobody), their looks, clothes and pose, the objects, \
+            the place, the light. The people and the place of the video are those of the picture. %s
+            """;
+
+    // the rules of WITHOUT_IDEA for a whole video instead of one action
+    private static final String STORYBOARD_WITHOUT_IDEA = """
+            There is no idea: you choose what happens. After "picture" write in "living" every person and animal \
+            the picture shows, or "none".
+            If "living" is "none", the place stays empty for the whole video: nobody comes in, nothing is touched, \
+            and things do not move; the scenes are camera moves (a slow dolly, pan or orbit) and changes of the \
+            light, plus what moves on its own outdoors (water, clouds, leaves in the wind, flames, smoke). The \
+            video model takes "no person" for a person, so never name who or what is not there.
+            Otherwise the story is what those living beings would really do: lively actions with clear movement of \
+            the body, not only blinking, a head tilt or a camera move. A toy or a ball may come into the frame for \
+            them; nobody new comes in. Things move only when one of them touches them.
+            Never move the scene to another place and never change the looks of what the picture shows.""";
+
+    private static final String STORYBOARD_TEXT = """
+            There is no start picture: the video model makes the first scene from its prompt alone, so the prompt of \
+            scene 1 describes the looks of everyone and of the place (a short prompt gives a random result).
+            """;
+
+    // 2026-10-29 test: a scene that ended with the man's back to the camera made the next one invent another face
+    // and another view out of the window; the seams themselves did not show. The rule worked, but once a scene ended
+    // with the rules themselves ("any person in the scene is an adult, aged 40, and his face is clearly visible")
+    private static final String SCENES = """
+            The video is %d seconds long and has no cuts: one unbroken shot made of %d scenes (%s). A video model \
+            makes one scene at a time, and each scene starts from the very last frames of the scene before: \
+            whatever those frames do not show is forgotten.
+            Write first:
+            - "cast": every person and animal of the video, each with a short phrase of looks and clothes ("the \
+            bearded man in the black T-shirt"), or "none". Every scene calls them by exactly these phrases.
+            - "place": the place, the time of day and the light in one sentence; they stay the same.
+            %s- "story": what happens over the whole video in 2-5 sentences, scene by scene. Keep everything the \
+            idea says and its order of events; invent what it leaves open. The story moves on: no scene repeats an \
+            action of an earlier one.
+            Then the scenes in their order: "scene1", "scene1End", "scene2", "scene2End" and so on up to the last \
+            scene, which has no end. "sceneNEnd" is one sentence on where everyone is and what they do at the last \
+            moment of scene N; scene N+1 starts exactly there.
+            The video model sees only the prompt of its own scene, so every scene prompt stands on its own: it \
+            begins with the first moment of its scene (scene 1: %s; a later scene: the end of the scene before), \
+            calls everyone by the phrases of "cast", tells what happens in the order it happens, about one action \
+            per 2-3 seconds (a scene with too little to do turns into slow motion), and keeps the place, the light \
+            and the camera style. End every scene with the faces of the people turned to the camera or in profile, \
+            never with their backs to the camera or their faces hidden, and with the place in view: the next scene \
+            knows only those last frames and would invent a new face and a new room.
+            A scene prompt only tells what is seen and heard in its scene: never copy these rules into it (no "his \
+            face stays visible to the camera", no "only the man is in the room", no ages or "adult" unless the scene \
+            is a sexual one), and stop when the scene is told. No scene fades out, cuts or ends: the next one goes on \
+            from its last frame.
+            Every scene prompt: %s
+            """;
+
+    private static final String SOUND_LINE = """
+            - "sound": the background sound of the place (a quiet room, rain on the window, birds, street noise), \
+            the same through the whole video.
+            """;
+
+    private static final String WAN_SCENE = """
+            3-5 sentences (50-100 words) without sound: where everyone is at the first moment, what they do and \
+            how they move, in order, their gestures and expressions, how the camera moves (static, slow push-in, \
+            pan, tracking).""";
+
+    private static final String LTX_SCENE = """
+            one flowing paragraph of 120-220 words with sound, present tense: the first moment, the actions in \
+            order, the movements and gestures, the expressions, the background, the camera (angle, movement), the \
+            light, and the sound: the background of "sound" plus what happens in the scene. Speech in quotes only \
+            if it ends within the scene; no music unless the idea asks for it.""";
+
     static String system(Start start, VideoPromptStyle style, int seconds, boolean portrait) {
         String video = video(style, seconds, start == Start.TEXT);
         String task = switch (start) {
-            case FRAME -> FRAME.formatted(portrait ? "portrait (tall)" : "landscape (wide)", video);
+            case FRAME -> FRAME.formatted(orientation(portrait), video);
             case PICTURE -> PICTURE_START.formatted(WITH_IDEA, video);
             case PICTURE_ONLY -> PICTURE_START.formatted(WITHOUT_IDEA, video);
             case TEXT -> TEXT_START.formatted(video);
         };
         return COMMON + task + BARE;
+    }
+
+    /**
+     * The instructions for the storyboard of a long video: all its scenes in one answer, see
+     * {@link #storyboardSchema}.
+     *
+     * @param lengths the seconds of each scene, in order
+     */
+    static String storyboard(Start start, VideoPromptStyle style, List<Integer> lengths, boolean portrait) {
+        String opening = switch (start) {
+            case FRAME -> STORYBOARD_FRAME.formatted(orientation(portrait));
+            case PICTURE -> STORYBOARD_PICTURE.formatted(WITH_IDEA);
+            case PICTURE_ONLY -> STORYBOARD_PICTURE.formatted(STORYBOARD_WITHOUT_IDEA);
+            case TEXT -> STORYBOARD_TEXT;
+        };
+        String firstMoment = switch (start) {
+            case FRAME -> "the photograph of \"framePrompt\"";
+            case PICTURE, PICTURE_ONLY -> "exactly the picture";
+            case TEXT -> "the opening of the video";
+        };
+        int total = lengths.stream().mapToInt(Integer::intValue).sum();
+        List<String> parts = new ArrayList<>();
+        for (int i = 0; i < lengths.size(); i++) {
+            parts.add("scene " + (i + 1) + ": " + lengths.get(i) + " s");
+        }
+        boolean sound = style == VideoPromptStyle.LTX;
+        String scenes = SCENES.formatted(total, lengths.size(), String.join(", ", parts), sound ? SOUND_LINE : "",
+                firstMoment, sound ? LTX_SCENE : WAN_SCENE);
+        return COMMON + opening + scenes + BARE;
+    }
+
+    /** The fields of a storyboard answer in the order they are written; the last scene has no end */
+    static Map<String, Object> storyboardSchema(Start start, VideoPromptStyle style, int scenes) {
+        List<String> fields = new ArrayList<>(switch (start) {
+            case FRAME -> List.of(FRAME_PROMPT);
+            case PICTURE -> List.of(PICTURE);
+            case PICTURE_ONLY -> List.of(PICTURE, LIVING);
+            case TEXT -> List.<String>of();
+        });
+        fields.add(CAST);
+        fields.add(PLACE);
+        if (style == VideoPromptStyle.LTX) {
+            fields.add(SOUND);
+        }
+        fields.add(STORY);
+        for (int number = 1; number <= scenes; number++) {
+            fields.add(scene(number));
+            if (number < scenes) {
+                fields.add(scene(number) + "End");
+            }
+        }
+        return schema(fields);
+    }
+
+    /** The answer field of a scene prompt (1-based) */
+    static String scene(int number) {
+        return "scene" + number;
+    }
+
+    /**
+     * @param lengths the seconds of each scene, as the storyboard was asked for
+     * @param empty   the picture shows nobody: the sentences on what is not there go, see {@link #withoutAbsent}
+     * @return the scenes of a storyboard answer
+     */
+    static List<Scene> scenes(Map<String, String> answer, List<Integer> lengths, boolean empty) {
+        List<Scene> scenes = new ArrayList<>(lengths.size());
+        for (int i = 0; i < lengths.size(); i++) {
+            String prompt = answer.get(scene(i + 1));
+            scenes.add(new Scene(lengths.get(i), empty ? withoutAbsent(prompt) : prompt, null));
+        }
+        return scenes;
     }
 
     /**
@@ -157,9 +320,17 @@ class IdeaPrompts {
             case PICTURE_ONLY -> List.of(PICTURE, LIVING, ACTION, VIDEO_PROMPT);
             case TEXT -> List.of(VIDEO_PROMPT);
         };
+        return schema(fields);
+    }
+
+    private static Map<String, Object> schema(List<String> fields) {
         Map<String, Object> properties = new LinkedHashMap<>();
         fields.forEach(field -> properties.put(field, Map.of("type", "string")));
-        return Map.of("type", "object", "properties", properties, "required", fields);
+        return Map.of("type", "object", "properties", properties, "required", List.copyOf(fields));
+    }
+
+    private static String orientation(boolean portrait) {
+        return portrait ? "portrait (tall)" : "landscape (wide)";
     }
 
     /** The "living" of the answer says the picture shows no people and no animals */
@@ -182,7 +353,8 @@ class IdeaPrompts {
         return switch (style) {
             // Wan always has a start picture
             case WAN -> WAN.formatted(seconds);
-            case LTX -> LTX.formatted(seconds, textOnly ? "the looks and clothes of the people, " : "");
+            case LTX -> LTX.formatted(60 + 10 * seconds, 120 + 10 * seconds, seconds,
+                    textOnly ? "the looks and clothes of the people, " : "");
         };
     }
 }

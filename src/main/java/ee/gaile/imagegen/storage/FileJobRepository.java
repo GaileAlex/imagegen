@@ -57,6 +57,8 @@ public class FileJobRepository implements JobStore {
                         job.setError("service restarted");
                         job.setFinishedAt(clock.instant());
                         save(job);
+                        // the scenes made so far of a long video will never be joined
+                        files.deleteScenes(job.getId());
                         restarted++;
                     }
                 } catch (RuntimeException | IOException e) {

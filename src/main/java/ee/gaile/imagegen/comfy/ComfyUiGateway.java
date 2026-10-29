@@ -1,6 +1,7 @@
 package ee.gaile.imagegen.comfy;
 
 import ee.gaile.imagegen.job.ComfyGateway;
+import ee.gaile.imagegen.job.Deadline;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobFailedException;
 import ee.gaile.imagegen.storage.JobFiles;
@@ -40,6 +41,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -92,9 +94,32 @@ public class ComfyUiGateway implements ComfyGateway {
     }
 
     @Override
-    public JobResult run(Job job, Consumer<Progress> progress, Instant deadline) {
+    public JobResult run(Job job, Consumer<Progress> progress, Deadline deadline) {
+        return calling(() -> runPrompt(job, progress, deadline));
+    }
+
+    @Override
+    public void runScene(Job job, int scene, Consumer<Progress> progress, Deadline deadline) {
+        calling(() -> {
+            makeScene(job, scene, progress, deadline);
+            return null;
+        });
+    }
+
+    @Override
+    public JobResult joinScenes(Job job, Consumer<Progress> progress, Deadline deadline) {
+        return calling(() -> join(job, progress, deadline));
+    }
+
+    @Override
+    public void discardScenes(Job job) {
+        files.deleteScenes(job.getId());
+    }
+
+    /** The failures of the HTTP calls to ComfyUI as failures of the job */
+    private <T> T calling(IoCall<T> call) {
         try {
-            return runPrompt(job, progress, deadline);
+            return call.run();
         } catch (RestClientResponseException e) {
             throw new JobFailedException("ComfyUI answered " + e.getStatusCode().value() + ": "
                     + abbreviate(e.getResponseBodyAsString()), e);
@@ -103,6 +128,11 @@ public class ComfyUiGateway implements ComfyGateway {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    @FunctionalInterface
+    private interface IoCall<T> {
+        T run() throws IOException;
     }
 
     @Override
@@ -157,12 +187,83 @@ public class ComfyUiGateway implements ComfyGateway {
         return graph;
     }
 
-    private JobResult runPrompt(Job job, Consumer<Progress> progress, Instant deadline) throws IOException {
+    private JobResult runPrompt(Job job, Consumer<Progress> progress, Deadline deadline) throws IOException {
         WorkflowTemplate template = workflows.get(job.getModel());
         ObjectNode graph = buildWorkflow(template, WorkflowValues.of(job));
         uploadInputs(job);
+        try {
+            Ran ran = execute(job, graph, template.outputNode(), progress, deadline);
+            JobResult result = storeOutput(job, ran.outputs().path(template.outputNode()));
+            forget(ran.promptId());
+            return result;
+        } finally {
+            deleteInputs(job);
+        }
+    }
 
-        PromptWatcher watcher = new PromptWatcher(template.outputNode(), progress);
+    /**
+     * A scene of a long video: the workflow of the job with the values of the scene and the save of its last frames;
+     * the scene and the frames go next to the job record, the frames over those of the scene before.
+     */
+    private void makeScene(Job job, int scene, Consumer<Progress> progress, Deadline deadline) throws IOException {
+        WorkflowTemplate template = workflows.get(job.getModel());
+        if (template.decodedNode() == null) {
+            throw new IllegalStateException("Workflow " + template.id() + " cannot make scenes");
+        }
+        Map<String, Object> values = WorkflowValues.scene(job, scene);
+        ObjectNode graph = buildWorkflow(template, values);
+        String tail = SceneGraphs.addTail(graph, template.decodedNode(), WorkflowValues.tailFrames(job),
+                WorkflowValues.fps(job), (String) values.get("filenamePrefix"));
+        if (scene == 1) {
+            uploadInputs(job);
+        } else {
+            upload(new FileSystemResource(files.tail(job.getId())));
+        }
+        try {
+            Ran ran = execute(job, graph, template.outputNode(), progress, deadline);
+            fetch(firstFile(ran.outputs().path(template.outputNode())), files.scene(job.getId(), scene));
+            fetch(firstFile(ran.outputs().path(tail)), files.tail(job.getId()));
+            forget(ran.promptId());
+            log.info("Job {}: scene {} of {} made", job.getId(), scene, job.getScenes().size());
+        } finally {
+            deleteInputs(job);
+            comfyFiles.delete("input", "", WorkflowValues.tailName(job));
+        }
+    }
+
+    /** All the scenes of a long video joined into the result of the job; the scene files go afterwards */
+    private JobResult join(Job job, Consumer<Progress> progress, Deadline deadline) throws IOException {
+        int count = job.getScenes().size();
+        List<String> names = new ArrayList<>(count);
+        try {
+            for (int scene = 1; scene <= count; scene++) {
+                upload(new FileSystemResource(files.scene(job.getId(), scene)));
+                names.add(WorkflowValues.sceneName(job, scene));
+            }
+            double repeated = (double) WorkflowValues.tailFrames(job) / WorkflowValues.fps(job);
+            ObjectNode graph = SceneGraphs.join(names, repeated, job.getId().toString());
+            Ran ran = execute(job, graph, SceneGraphs.JOIN_SAVE, progress, deadline);
+            String contentType = "video/mp4";
+            Path target = files.result(job.getId(), contentType);
+            fetch(firstFile(ran.outputs().path(SceneGraphs.JOIN_SAVE)), target);
+            forget(ran.promptId());
+            files.deleteScenes(job.getId());
+            int[] size = WorkflowValues.videoSize(job);
+            return new JobResult(contentType, Files.size(target), size[0], size[1],
+                    (double) WorkflowValues.seconds(job));
+        } finally {
+            names.forEach(name -> comfyFiles.delete("input", "", name));
+        }
+    }
+
+    /**
+     * Queues the graph and waits for its end.
+     *
+     * @return the prompt and its outputs by node id
+     */
+    private Ran execute(Job job, ObjectNode graph, String outputNode, Consumer<Progress> progress,
+                        Deadline deadline) {
+        PromptWatcher watcher = new PromptWatcher(outputNode, progress);
         Runnable unsubscribe = events.subscribe(watcher);
         try {
             String promptId = queue(graph);
@@ -176,17 +277,17 @@ public class ComfyUiGateway implements ComfyGateway {
                 case ERROR -> throw new JobFailedException(outcome.message());
                 case INTERRUPTED -> throw new JobFailedException("interrupted");
                 default -> {
-                    // success: the output is fetched below
+                    // success: the output is fetched by the caller
                 }
             }
-            JsonNode entry = awaitHistory(promptId, template.outputNode(), deadline);
-            JobResult result = storeOutput(job, entry.path("outputs").path(template.outputNode()));
-            forget(promptId);
-            return result;
+            JsonNode entry = awaitHistory(promptId, outputNode, deadline);
+            return new Ran(promptId, entry.path("outputs"));
         } finally {
             unsubscribe.run();
-            deleteInputs(job);
         }
+    }
+
+    private record Ran(String promptId, JsonNode outputs) {
     }
 
     private void uploadInputs(Job job) {
@@ -240,7 +341,7 @@ public class ComfyUiGateway implements ComfyGateway {
     /**
      * Waits for the end of the prompt: events of the socket normally, /history when the socket is down or quiet.
      */
-    private PromptWatcher.Outcome await(String promptId, PromptWatcher watcher, Instant deadline) {
+    private PromptWatcher.Outcome await(String promptId, PromptWatcher watcher, Deadline deadline) {
         Instant failingSince = null;
         try {
             while (true) {
@@ -249,11 +350,18 @@ public class ComfyUiGateway implements ComfyGateway {
                     return outcome;
                 }
                 Instant now = clock.instant();
-                if (!now.isBefore(deadline)) {
+                if (!now.isBefore(deadline.at())) {
                     interruptQuietly();
                     throw new JobFailedException("timeout");
                 }
-                boolean quiet = Duration.between(watcher.lastEvent(), Instant.now()).compareTo(SILENCE) > 0;
+                Duration silent = Duration.between(watcher.lastEvent(), Instant.now());
+                // Without the socket no event can come: the silence says nothing then
+                if (events.isConnected() && silent.compareTo(deadline.stall()) > 0) {
+                    interruptQuietly();
+                    throw new JobFailedException("timeout: ComfyUI reported nothing for " + silent.toMinutes()
+                            + " min");
+                }
+                boolean quiet = silent.compareTo(SILENCE) > 0;
                 if (!events.isConnected() || quiet) {
                     try {
                         PromptWatcher.Outcome fromHistory = outcomeFromHistory(promptId);
@@ -312,14 +420,14 @@ public class ComfyUiGateway implements ComfyGateway {
      * ComfyUI writes the history entry a moment after it announces the end of the prompt, so the entry is asked for
      * until it has the output.
      */
-    private JsonNode awaitHistory(String promptId, String outputNode, Instant deadline) {
+    private JsonNode awaitHistory(String promptId, String outputNode, Deadline deadline) {
         try {
             while (true) {
                 JsonNode entry = history(promptId);
                 if (entry != null && entry.path("outputs").has(outputNode)) {
                     return entry;
                 }
-                if (!clock.instant().isBefore(deadline)) {
+                if (!clock.instant().isBefore(deadline.at())) {
                     throw new JobFailedException("ComfyUI returned no output");
                 }
                 Thread.sleep(pollInterval.toMillis());
@@ -348,13 +456,9 @@ public class ComfyUiGateway implements ComfyGateway {
         if (file == null) {
             throw new JobFailedException("ComfyUI returned no output");
         }
-        String filename = file.path("filename").asString();
-        String contentType = contentType(filename);
+        String contentType = contentType(file.path("filename").asString());
         Path target = files.result(job.getId(), contentType);
-        String subfolder = file.path("subfolder").asString("");
-        String type = file.path("type").asString("output");
-        download(filename, subfolder, type, target);
-        comfyFiles.delete(type, subfolder, filename);
+        fetch(file, target);
 
         long size = Files.size(target);
         if (job.getKind() == JobKind.VIDEO) {
@@ -367,6 +471,18 @@ public class ComfyUiGateway implements ComfyGateway {
             throw new JobFailedException("The result of ComfyUI is not an image");
         }
         return new JobResult(contentType, size, image.getWidth(), image.getHeight(), null);
+    }
+
+    /** Downloads an output file of ComfyUI to the target and deletes it from the output folder */
+    private void fetch(JsonNode file, Path target) throws IOException {
+        if (file == null) {
+            throw new JobFailedException("ComfyUI returned no output");
+        }
+        String filename = file.path("filename").asString();
+        String subfolder = file.path("subfolder").asString("");
+        String type = file.path("type").asString("output");
+        download(filename, subfolder, type, target);
+        comfyFiles.delete(type, subfolder, filename);
     }
 
     private JsonNode firstFile(JsonNode output) {

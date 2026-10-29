@@ -1,6 +1,7 @@
 {
   "description": "Wan 2.2 Enhanced NSFW Fast Move V2 (Civitai 2053259): Lightning built in, so no LoRA loaders; livelier motion",
   "output": "17",
+  "decoded": "15",
   "keepFace": "WAN_LAST_FRAME",
   "timing": "832x480 81 frames: 157 s with the model load",
   "params": {

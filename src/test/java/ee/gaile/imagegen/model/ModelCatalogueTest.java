@@ -72,8 +72,12 @@ class ModelCatalogueTest {
         assertThat(param("muse-txt2img", "cfg").max()).isEqualTo(4.0);
         ParamDefinition width = param("muse-txt2img", "width");
         assertThat(List.of(width.min(), width.max(), width.step())).containsExactly(512, 2048, 16);
-        assertThat(param("wan22-i2v-fastmove", "seconds").max()).isEqualTo(6);
-        assertThat(param("ltx25-i2v", "seconds").max()).isEqualTo(12);
+        assertThat(param("wan22-i2v-fastmove", "seconds").max()).isEqualTo(20);
+        assertThat(param("ltx25-i2v", "seconds").max()).isEqualTo(30);
+        // longer than one clip = scenes
+        assertThat(TestCatalogue.model("wan22-i2v-fastmove").clipSeconds()).isEqualTo(6);
+        assertThat(TestCatalogue.model("ltx25-i2v").clipSeconds()).isEqualTo(12);
+        assertThat(TestCatalogue.model("muse-txt2img").clipSeconds()).isNull();
     }
 
     @Test

@@ -1,6 +1,7 @@
 {
   "description": "LTX-2.5 uncensored v1.1 Q4_K_M GGUF (ChrisColeTech on Hugging Face: Eros10 NSFW, DMD distill, IC and I2V LoRAs merged in) in the graph of ltx25-i2v; 8 steps, CFG 1 as its author recommends. Compared 2026-10-26 in test-results/nsfw-cmp: the best prompt following on nude scenes, the stock LTX blurs and dodges them",
   "output": "31",
+  "decoded": "28",
   "keepFace": "LTX_GUIDES",
   "timing": "1216x704 121 frames: 188 s I2V, 145 s T2V (with the load)",
   "params": {

@@ -67,6 +67,8 @@ Response:
 }]
 ```
 
+A VIDEO mode also has `"clipSeconds"` and `"sceneSeconds"` (see "Long videos").
+
 Param types: `TEXT`, `INT`, `FLOAT`, `ENUM` (with `options`), `SEED` (empty = random), `BOOL` (true / false). Only params listed in the
 catalogue are accepted from the client; the rest of `<id>.params.json` (`filenamePrefix`, LTX `halfWidth`, mask blur
 ...) is set by the service. Derived values:
@@ -74,19 +76,23 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
   (1168x880 for 4:3, 1024x1024 for a square), both sides rounded down to a multiple of 16.
 - VIDEO size is an `orientation` ENUM (`landscape` / `portrait`): Wan 832x480 / 480x832, LTX 1216x704 / 704x1216
   (the service sets the LTX stage-1 `halfWidth`/`halfHeight`).
-- VIDEO length is a client param in seconds (`seconds`: Wan 2-6, LTX 2-12), converted to frames: 16 * s + 1 for Wan (16 fps),
+- VIDEO length is a client param in seconds (`seconds`: Wan 2-20, LTX 2-30), converted to frames: 16 * s + 1 for Wan (16 fps),
   24 * s + 1 for LTX (24 fps); both satisfy the frame rules of the models (4n+1, 8n+1). LTX 10 s ~195 s, 12 s ~255 s.
+  `clipSeconds` of a VIDEO mode (Wan 6, LTX 12) is the longest clip made in one run: a longer video is a long video
+  made of scenes of at most `sceneSeconds` (Wan 5, LTX 10), see "Long videos".
 - `needsImage` = the job is refused without an image; `acceptsImage` = an image may be given. LTX has
   `needsImage: false, acceptsImage: true`: without an image the video is made from the text alone, the service adds
   `"textOnly": true` to the params of the job (shown in the job JSON, not accepted from the client) and the workflow
   skips its start image.
-- VIDEO `keepFace` (BOOL, default true) keeps the face of the start image: the image is given to the model again later
+- VIDEO `keepFace` (BOOL, default false since 2026-10-29; ignored for a long video, where it would pull every scene
+  back to the start picture) keeps the face of the start image: the image is given to the model again later
   in the clip, so the face does not drift away (`keepFace` of `<id>.params.json` names how, see `FaceAnchor`). Wan:
   the start image is also the last frame (WanFirstLastFrameToVideo). LTX: the start image is a guide frame about every
   2.7 s and on the last frame, on both stages (LTXVAddGuide at strength 0.5, then LTXVCropGuides); 8 s took 308 s
   instead of 182 s. Strength 1.0 made a turning head jump back to the photo at every guide, 0.3 let the face drift.
   The person comes back to the pose of the picture there and the motion gets calmer, so it is a bad fit for a scene
-  where someone leaves the frame. Ignored for a video from the text alone.
+  where someone leaves the frame. Ignored for a video from the text alone. LTX 12 s with it once spilled out of the
+  16 GB of VRAM (6-10 min at ~50 W instead of ~1.5 min): one of the reasons it is off by default.
 
 ## Jobs
 
@@ -147,7 +153,11 @@ Errors (body `{"error": "<code>", "message": "..."}`):
 - `status`: `QUEUED`, `RUNNING`, `DONE`, `FAILED`, `CANCELLED`
 - `progress.phase`: `TRANSLATING` (the Russian texts are translated into English), `LOADING` (running, no sampler
   step reported yet: models load), `SAMPLING` (value/max of the
-  current sampler; video and LTX have two samplers, the bar restarts), `DECODING` (after the last step)
+  current sampler; video and LTX have two samplers, the bar restarts), `DECODING` (after the last step); a long video
+  also `STORYBOARD`, `WAITING`, `JOINING`, and `progress.scene` / `progress.scenes` (see "Long videos")
+- A run of ComfyUI fails with `"timeout: ComfyUI reported nothing for N min"` when no event of it came for
+  `imagegen.stall-timeout` (10 min; a sampler reports every step, a slow one too), and with `"timeout"` after
+  `imagegen.job-timeout` (60 min) however lively. Until 2026-10-29 a fixed 15 min failed a slow but alive LTX job.
 - `result` when DONE: `{"contentType": "image/png", "size": 1834221, "width": 1024, "height": 1024}`
   (`durationSeconds` for video)
 - `translations`: param name -> the English text the model got instead of the typed one. Every text param with
@@ -196,6 +206,41 @@ Answer `200` with the job as `GET /api/jobs/{id}` shows it. Only a DONE job can 
 works on any job and starts the 10 days again (`unpinnedAt` in the record), so an old job does not go at the next
 cleanup.
 
+## Long videos
+
+A VIDEO job longer than `clipSeconds` of its mode (or with its scenes written out in the prompt) is one continuous
+clip made of scenes: the video model makes one scene at a time, and every scene after the first starts from the
+last frames of the one before (the "tail": LTX 17 frames ~0.7 s, Wan 9 frames ~0.56 s), given as a batch to the start
+image node, so the motion goes on across the seam and not only the pose. The scenes are joined at the end without the
+tail each one repeats. Tests 2026-10-29 (a man with a guitar): no visible seam in 30 s; a scene that ended with the
+man's back to the camera made the next one invent another face, so the storyboard keeps the faces in view at the end
+of a scene.
+
+- The scenes, two ways:
+  - written out in `prompt`: every scene starts with a mark line `[Scene 2 · 10 s]` (any separator, Russian
+    `[Сцена 2, 10 с]` and Estonian `[Stseen 2 · 10]` too), its prompt follows; text before the first mark belongs to
+    the first scene. Each scene lasts 2 to `sceneSeconds`; the sum is the length of the video (`seconds` of the job
+    is set to it, at most the max of `seconds`). One mark only = a plain clip with that text. The prompt ideas write this form.
+  - not written out, `seconds` above `clipSeconds`: the length is split into the fewest even scenes (30 s LTX =
+    3 x 10, 13 s Wan = 5 + 4 + 4) and the job writes their prompts itself, from `prompt` taken as the idea or the
+    story, with the idea model (`STORYBOARD`, on the GPU the job holds: ComfyUI unloads its model for it; the CPU when
+    the GPU instance fails); the model looks at the start image.
+- A scene typed with Cyrillic is translated once (`english` of the scene); `prompt` of a long video itself is not.
+- `keepFace` is ignored; scene N has the seed + N - 1.
+- The queue runs one scene per turn: between two scenes the job goes back into the queue (`status` stays RUNNING,
+  `progress.phase` `WAITING`, `position` its place), so it holds the other users up by one scene at most. A failed
+  step (the storyboard or a scene) is tried once more; a second failure fails the job. The join runs right after the
+  last scene (`JOINING`, ~20 s, ComfyUI core `LoadVideo`, `Video Slice`, `ConcatenateVideo`, sound included).
+- `progress.scene` / `progress.scenes`: the scene the phase belongs to and how many (absent for a single clip).
+- The job JSON has `"scenes": [{"seconds": 10, "prompt": "...", "english": "..."}]` (`prompt` absent until the
+  storyboard is written, `english` only for a translated scene); absent for a single clip.
+- Time: LTX 30 s ~13 min (scenes of 10 s ~4-4.5 min each), Wan 20 s ~13 min (pieces ~3.2 min each). Wan holds
+  20 s only: in the 30 s test its chain blurred and shifted its colours from ~17 s on (black socks turned green), LTX
+  stayed clean for 30 s.
+- While it runs the scenes and the tail are kept as `<jobId>.scene<N>.mp4` and `<jobId>.tail.png`; they are deleted
+  after the join, a failure, a cancel, and at the start of the service (a long video does not go on after a restart:
+  it becomes FAILED like any pending job).
+
 ## Prompt ideas
 
 ### `POST /api/prompt-ideas` (multipart)
@@ -225,7 +270,14 @@ Three cases, by what the video starts from:
 - neither, for a mode that runs from the text alone (LTX) -> `{"videoPrompt": "..."}` describing the looks too.
 
 The prompt style follows `prompt-style` of the mode: `WAN` (2-4 sentences of motion and camera, no sound) or `LTX`
-(one paragraph in time order with camera, light and sound). The prompts are English, so the translator leaves them.
+(one paragraph in time order with camera, light and sound; longer for a longer clip: 110-170 words for 5 s, 180-240
+for 12 s). The prompts are English, so the translator leaves them.
+
+`seconds` above `clipSeconds` of the mode: `videoPrompt` has the scenes of a long video written out
+(`[Scene 1 · 10 s]` + prompt, a blank line, `[Scene 2 · 10 s]` ...), all from one answer: the model writes the cast
+(the phrases every scene calls the people by), the place, the background sound (LTX), the story, then every scene
+and where everyone is at its end, which is where the next scene starts. ~1 min on the GPU for 30 s; the idea timeout
+is 8 min for the CPU (cv-app waits up to 9 min).
 Errors: 400 `invalid_params` (empty idea without a picture, too long idea, not a VIDEO mode, a mode that needs a
 picture without one, `sourceJobId` not a finished image job of the user), 503 `idea_unavailable` (no model set, no
 answer, no JSON).
@@ -284,7 +336,8 @@ service deletes the inputs after the prompt and the output once downloaded (`Com
 Volume `imagegen-results` mounted at `/data`:
 - `/data/jobs/<jobId>.json` - the job record (everything of `GET /api/jobs/{id}` plus the user id)
 - `/data/jobs/<jobId>.png|.mp4` - the result, `<jobId>.input.png` / `<jobId>.mask.png` - the inputs,
-  `<jobId>.thumbnail.jpg` - the thumbnail of the result (made on the first request)
+  `<jobId>.thumbnail.jpg` - the thumbnail of the result (made on the first request), `<jobId>.scene<N>.mp4` /
+  `<jobId>.tail.png` - the scenes of a long video while it runs
 
 No database: the record is a small file next to the result, so both disappear together. Loaded into memory at
 start; a record QUEUED or RUNNING at start becomes FAILED (`"error": "service restarted"`). An hourly job deletes

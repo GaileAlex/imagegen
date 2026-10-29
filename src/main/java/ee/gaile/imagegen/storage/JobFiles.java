@@ -70,14 +70,34 @@ public class JobFiles {
         };
     }
 
+    /** A scene of a long video (1-based), kept until the scenes are joined */
+    public Path scene(UUID id, int number) {
+        return directory.resolve(id + ".scene" + number + ".mp4");
+    }
+
+    /** The last frames of the latest scene of a long video (an animated png): the next scene starts from them */
+    public Path tail(UUID id) {
+        return directory.resolve(id + ".tail.png");
+    }
+
+    /** The scenes and the tail of a long video: no use once joined, failed or cancelled */
+    public void deleteScenes(UUID id) {
+        delete(id + ".scene*.mp4");
+        delete(id + ".tail.png");
+    }
+
     /** The record and every file of the job */
     public void deleteAll(UUID id) {
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, id + ".*")) {
+        delete(id + ".*");
+    }
+
+    private void delete(String glob) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, glob)) {
             for (Path file : files) {
                 Files.deleteIfExists(file);
             }
         } catch (IOException e) {
-            throw new UncheckedIOException("Cannot delete the files of job " + id, e);
+            throw new UncheckedIOException("Cannot delete " + glob, e);
         }
     }
 }

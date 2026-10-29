@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.List;
 
 import static ee.gaile.imagegen.job.JobQueueTest.PROPERTIES;
 import static ee.gaile.imagegen.job.JobQueueTest.job;
@@ -30,7 +31,7 @@ class UnloadPolicyTest {
         queue = new JobQueue(gateway, new FakeTranslator(), job -> {
         }, job -> {
         }, PROPERTIES, clock, () -> {
-        });
+        }, job -> List.of());
         queue.start();
         policy = new UnloadPolicy(queue, PROPERTIES, clock);
     }

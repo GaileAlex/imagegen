@@ -163,10 +163,10 @@ class PromptIdeaServiceTest {
 
     @Test
     void textOnlyIsForTheModesThatRunWithoutAPicture() {
-        service.write(1, request("ltx25-nsfw-i2v", 20, false, null, null), null);
+        service.write(1, request("ltx25-nsfw-i2v", 12, false, null, null), null);
 
         assertThat(writer.schemaFields).containsExactly("videoPrompt");
-        // clamped to the range of the mode, and the looks are asked for
+        // the looks are asked for
         assertThat(writer.system).contains("12-second clip").contains("the looks and clothes of the people");
 
         assertThatThrownBy(() -> service.write(1, request("wan22-i2v-fastmove", 5, false, null, null), null))
@@ -201,6 +201,29 @@ class PromptIdeaServiceTest {
 
         assertThatThrownBy(() -> service.write(1, request("ltx25-i2v", 5, false, null, sourceId), null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("sourceJobId");
+    }
+
+    @Test
+    void aVideoLongerThanOneClipGetsItsScenesWrittenOutFromOneAnswer() {
+        PromptIdea idea = service.write(1, request("ltx25-i2v", 30, true, null, null), null);
+
+        assertThat(writer.schemaFields).containsExactly("framePrompt", "cast", "place", "sound", "story", "scene1",
+                "scene1End", "scene2", "scene2End", "scene3");
+        assertThat(writer.system).contains("30 seconds long")
+                .contains("3 scenes (scene 1: 10 s, scene 2: 10 s, scene 3: 10 s)")
+                .contains("never with their backs to the camera");
+        assertThat(idea.framePrompt()).isEqualTo("frame text");
+        assertThat(idea.videoPrompt()).isEqualTo("[Scene 1 · 10 s]\nscene1 text\n\n[Scene 2 · 10 s]\nscene2 text"
+                + "\n\n[Scene 3 · 10 s]\nscene3 text");
+    }
+
+    @Test
+    void theScenesOfWanHaveNoSound() {
+        PromptIdea idea = service.write(1, request("wan22-i2v-fastmove", 13, true, null, null), null);
+
+        assertThat(writer.schemaFields).doesNotContain("sound").contains("scene3").doesNotContain("scene3End");
+        assertThat(writer.system).contains("without sound").contains("scene 1: 5 s, scene 2: 4 s, scene 3: 4 s");
+        assertThat(idea.videoPrompt()).startsWith("[Scene 1 · 5 s]\n");
     }
 
     private static String request(String model, Integer seconds, boolean frame, String orientation, UUID source) {

@@ -61,11 +61,35 @@ public class ModelCatalogue {
         if ((kind == JobKind.VIDEO) != (config.promptStyle() != null)) {
             throw new IllegalStateException(config.id() + ": a prompt style is required for VIDEO and only for it");
         }
+        if (kind == JobKind.VIDEO) {
+            checkLengths(config, template, params);
+        } else if (config.clipSeconds() != null || config.sceneSeconds() != null) {
+            throw new IllegalStateException(config.id() + ": only a VIDEO mode has clip and scene lengths");
+        }
         boolean needsImage = acceptsImage && !config.imageOptional();
         boolean needsMask = kind == JobKind.INPAINT;
         String outputType = kind == JobKind.VIDEO ? "video/mp4" : "image/png";
         return new ModelDefinition(config.id(), kind, config.title(), config.description(), needsImage, acceptsImage,
-                needsMask, outputType, config.typicalSeconds(), List.copyOf(params), config.promptStyle());
+                needsMask, outputType, config.typicalSeconds(), config.clipSeconds(), List.copyOf(params),
+                config.promptStyle(), config.sceneSeconds());
+    }
+
+    /**
+     * A video longer than the clip length is made of scenes: the workflow must say where its decoded frames are (the
+     * last ones start the next scene), and a scene is no longer than a clip
+     */
+    private void checkLengths(ModelConfig config, WorkflowTemplate template, List<ParamDefinition> params) {
+        if (config.clipSeconds() == null || config.sceneSeconds() == null
+                || config.sceneSeconds() > config.clipSeconds()) {
+            throw new IllegalStateException(config.id() + ": a VIDEO mode needs clip-seconds and a scene-seconds "
+                    + "no longer than it");
+        }
+        boolean longer = params.stream().anyMatch(param -> param.name().equals("seconds") && param.max() != null
+                && param.max().intValue() > config.clipSeconds());
+        if (longer && template.decodedNode() == null) {
+            throw new IllegalStateException(config.id() + ": a video longer than a clip needs \"decoded\" in its "
+                    + "params file");
+        }
     }
 
     private ParamDefinition buildParam(String modelId, ParamConfig param, ParamSpec spec) {

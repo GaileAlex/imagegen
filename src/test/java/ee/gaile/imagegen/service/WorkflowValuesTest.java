@@ -2,9 +2,11 @@ package ee.gaile.imagegen.service;
 
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobKind;
+import ee.gaile.imagegen.job.Scene;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -92,6 +94,39 @@ class WorkflowValuesTest {
                     "orientation", orientation));
             assertThat((Integer) values.get("halfWidth") % 32).isZero();
             assertThat((Integer) values.get("halfHeight") % 32).isZero();
+        }
+    }
+
+    @Test
+    void theFirstSceneStartsFromTheStartImageAndTheNextFromTheTailOfTheOneBefore() {
+        Job job = job("ltx25-i2v", JobKind.VIDEO, "prompt", "the whole story", "seconds", 20,
+                "orientation", "portrait", "keepFace", true, JobFactory.TEXT_ONLY, true);
+        job.setScenes(List.of(new Scene(10, "he plays", null), new Scene(10, "он встаёт", "he stands up")));
+
+        Map<String, Object> first = WorkflowValues.scene(job, 1);
+        Map<String, Object> second = WorkflowValues.scene(job, 2);
+
+        assertThat(first).containsEntry("prompt", "he plays").containsEntry("frames", 241)
+                .containsEntry("image", "3f0c0000-0000-0000-0000-000000000001.input.png")
+                .containsEntry(JobFactory.TEXT_ONLY, true).containsEntry("keepFace", false)
+                .containsEntry("seed", 5L).containsEntry("halfWidth", 352)
+                .containsEntry("filenamePrefix", "3f0c0000-0000-0000-0000-000000000001-scene1");
+        // the 17 frames of the tail, then 10 s more; the English text of a Russian scene
+        assertThat(second).containsEntry("prompt", "he stands up").containsEntry("frames", 257)
+                .containsEntry("image", "3f0c0000-0000-0000-0000-000000000001.tail.png")
+                .containsEntry(JobFactory.TEXT_ONLY, false).containsEntry("seed", 6L);
+    }
+
+    @Test
+    void sceneFramesSatisfyTheRulesOfTheModels() {
+        for (int seconds = 2; seconds <= 10; seconds++) {
+            for (String model : new String[]{"wan22-i2v", "ltx25-nsfw-i2v"}) {
+                Job job = job(model, JobKind.VIDEO, "seconds", 2 * seconds, "orientation", "landscape");
+                job.setScenes(List.of(new Scene(seconds, "a", null), new Scene(seconds, "b", null)));
+                int step = model.startsWith("ltx") ? 8 : 4;
+                assertThat(((Integer) WorkflowValues.scene(job, 1).get("frames") - 1) % step).isZero();
+                assertThat(((Integer) WorkflowValues.scene(job, 2).get("frames") - 1) % step).isZero();
+            }
         }
     }
 }

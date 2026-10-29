@@ -3,6 +3,7 @@ package ee.gaile.imagegen.service;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.MutableClock;
+import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.model.TestCatalogue;
 import org.junit.jupiter.api.Test;
 
@@ -101,9 +102,9 @@ class JobFactoryTest {
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("muse-txt2img", params("prompt", "x", "cfg", 0.5)))
                 .isInstanceOf(InvalidParamsException.class);
-        assertThatThrownBy(() -> create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 7)))
+        assertThatThrownBy(() -> create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 21)))
                 .isInstanceOf(InvalidParamsException.class);
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 13)))
+        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 31)))
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 1)))
                 .isInstanceOf(InvalidParamsException.class);
@@ -120,10 +121,10 @@ class JobFactoryTest {
     }
 
     @Test
-    void videosKeepTheFaceUnlessTheClientTurnsItOff() {
-        assertThat(create("wan22-i2v", params("prompt", "x")).getParams()).containsEntry("keepFace", true);
-        assertThat(create("ltx25-i2v", params("prompt", "x", "keepFace", false)).getParams())
-                .containsEntry("keepFace", false);
+    void videosKeepTheFaceOnlyWhenTheClientTurnsItOn() {
+        assertThat(create("wan22-i2v", params("prompt", "x")).getParams()).containsEntry("keepFace", false);
+        assertThat(create("ltx25-i2v", params("prompt", "x", "keepFace", true)).getParams())
+                .containsEntry("keepFace", true);
         assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "keepFace", "yes")))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("keepFace");
         assertThatThrownBy(() -> create("muse-txt2img", params("prompt", "x", "keepFace", true)))
@@ -188,7 +189,7 @@ class JobFactoryTest {
 
     @Test
     void aTooLongTextIsRefused() {
-        assertThatThrownBy(() -> create("muse-txt2img", params("prompt", "x".repeat(4001))))
+        assertThatThrownBy(() -> create("muse-txt2img", params("prompt", "x".repeat(12001))))
                 .isInstanceOf(InvalidParamsException.class);
     }
 
@@ -214,5 +215,52 @@ class JobFactoryTest {
         Job video = create("wan22-i2v-fastmove", params("prompt", "x"));
 
         assertThat(video.getParams()).doesNotContainKeys("width", "height");
+    }
+
+    @Test
+    void aVideoUpToOneClipHasNoScenes() {
+        assertThat(create("ltx25-i2v", params("prompt", "x", "seconds", 12)).getScenes()).isNull();
+        assertThat(create("wan22-i2v", params("prompt", "x", "seconds", 6)).getScenes()).isNull();
+        assertThat(create("muse-txt2img", params("prompt", "[Scene 1 · 5 s]\na\n[Scene 2 · 5 s]\nb")).getScenes())
+                .isNull();
+    }
+
+    @Test
+    void aLongerVideoGetsEvenScenesForItsStoryboard() {
+        Job ltx = create("ltx25-i2v", params("prompt", "a man plays, then opens the window", "seconds", 30));
+        Job wan = create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 13));
+
+        assertThat(ltx.getScenes()).containsExactly(new Scene(10, null, null), new Scene(10, null, null),
+                new Scene(10, null, null));
+        assertThat(wan.getScenes()).extracting(Scene::seconds).containsExactly(5, 4, 4);
+        assertThat(ltx.getParams()).containsEntry("prompt", "a man plays, then opens the window");
+    }
+
+    @Test
+    void theWrittenScenesMakeTheVideoAndItsLength() {
+        Job job = create("ltx25-nsfw-i2v", params("prompt", "[Scene 1 · 10 s]\nhe plays\n[Scene 2 · 7 s]\nhe stands",
+                "seconds", 5));
+
+        assertThat(job.getScenes()).containsExactly(new Scene(10, "he plays", null), new Scene(7, "he stands", null));
+        assertThat(job.getParams()).containsEntry("seconds", 17);
+    }
+
+    @Test
+    void oneWrittenSceneIsAPlainClip() {
+        Job job = create("ltx25-i2v", params("prompt", "[Scene 1 · 5 s]\nhe plays", "seconds", 5));
+
+        assertThat(job.getScenes()).isNull();
+        assertThat(job.getParams()).containsEntry("prompt", "he plays");
+    }
+
+    @Test
+    void writtenScenesKeepToTheirLengths() {
+        assertThatThrownBy(() -> create("wan22-i2v", params("prompt", "[Scene 1 · 6 s]\na\n[Scene 2 · 5 s]\nb")))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("2 to 5 seconds");
+        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "[Scene 1 · 1 s]\na\n[Scene 2 · 5 s]\nb")))
+                .isInstanceOf(InvalidParamsException.class);
+        String fourScenes = "[Scene 1 · 10 s]\na\n[Scene 2 · 10 s]\nb\n[Scene 3 · 10 s]\nc\n[Scene 4 · 2 s]\nd";
+        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", fourScenes)))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("32 s");
     }
 }

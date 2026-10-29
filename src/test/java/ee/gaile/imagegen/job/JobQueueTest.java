@@ -18,7 +18,8 @@ import static org.awaitility.Awaitility.await;
 public class JobQueueTest {
 
     public static final ImagegenProperties PROPERTIES = new ImagegenProperties("http://comfyui", Path.of("data"),
-            Duration.ofMinutes(30), Duration.ofSeconds(150), Duration.ofDays(10), Duration.ofMinutes(15));
+            Duration.ofMinutes(30), Duration.ofSeconds(150), Duration.ofDays(10), Duration.ofMinutes(60),
+            Duration.ofMinutes(10));
 
     private final FakeGateway gateway = new FakeGateway();
     private final FakeTranslator translator = new FakeTranslator();
@@ -27,6 +28,7 @@ public class JobQueueTest {
     private final List<Job> prepared = new CopyOnWriteArrayList<>();
     // the jobs ComfyUI had started when the GPU guest left, one entry per leave
     private final List<Integer> guestLeaves = new CopyOnWriteArrayList<>();
+    private final List<Job> storyboarded = new CopyOnWriteArrayList<>();
     private volatile String sourceProblem;
     private JobQueue queue;
 
@@ -38,8 +40,12 @@ public class JobQueueTest {
             }
             prepared.add(job);
         };
+        Storyboards storyboards = job -> {
+            storyboarded.add(job);
+            return job.getScenes().stream().map(scene -> scene.withPrompt("written " + scene.seconds())).toList();
+        };
         queue = new JobQueue(gateway, translator, sources, job -> saved.add(job.getStatus()), PROPERTIES, clock,
-                () -> guestLeaves.add(gateway.started.size()));
+                () -> guestLeaves.add(gateway.started.size()), storyboards);
         queue.start();
     }
 
@@ -50,6 +56,13 @@ public class JobQueueTest {
 
     public static Job job(long userId, String model) {
         return new Job(UUID.randomUUID(), userId, "user" + userId, model, JobKind.IMAGE, Map.of(), 1, null);
+    }
+
+    private static Job longVideo(long userId, String model, Scene... scenes) {
+        Job job = new Job(UUID.randomUUID(), userId, "user" + userId, model, JobKind.VIDEO,
+                Map.of("prompt", "a story", "seconds", 20), 1, null);
+        job.setScenes(List.of(scenes));
+        return job;
     }
 
     @Test
@@ -275,6 +288,123 @@ public class JobQueueTest {
         await().until(() -> video.getStatus() == JobStatus.FAILED);
         assertThat(video.getError()).isEqualTo("the start image job ended as FAILED");
         assertThat(gateway.started).isEmpty();
+    }
+
+    @Test
+    void aLongVideoRunsOneScenePerTurnAndOtherUsersGoInBetween() throws InterruptedException {
+        Job film = longVideo(1, "film", new Scene(10, "plays", null), new Scene(10, "stands up", null));
+        Job other = job(2, "other");
+        queue.submit(film);
+        gateway.awaitRunning();
+        queue.submit(other);
+
+        gateway.complete(film);
+        assertThat(gateway.awaitRunning()).isSameAs(other);
+        // back in the queue for its second scene, still RUNNING to the page
+        assertThat(film.getStatus()).isEqualTo(JobStatus.RUNNING);
+        assertThat(film.getProgress()).isEqualTo(new Progress(Progress.Phase.WAITING, 0, 0, 2, 2));
+        assertThat(queue.position(film)).isEqualTo(1);
+
+        gateway.complete(other);
+        assertThat(gateway.awaitRunning()).isSameAs(film);
+        assertThat(film.getProgress().scene()).isEqualTo(2);
+        gateway.complete(film);
+
+        await().until(() -> film.getStatus() == JobStatus.DONE);
+        assertThat(gateway.started).containsExactly("film#scene1", "other", "film#scene2", "film#join");
+        assertThat(film.getResult().contentType()).isEqualTo("video/mp4");
+        assertThat(film.getProgress()).isNull();
+        assertThat(storyboarded).isEmpty();
+        assertThat(gateway.discarded).isEmpty();
+    }
+
+    @Test
+    void theStoryboardIsWrittenFirstOnTheFreedGpu() throws InterruptedException {
+        Job film = longVideo(1, "film", new Scene(10, null, null), new Scene(8, null, null));
+        queue.submit(film);
+
+        assertThat(gateway.awaitRunning()).isSameAs(film);
+        assertThat(storyboarded).containsExactly(film);
+        assertThat(gateway.frees).isEqualTo(1);
+        // the language model left the GPU before the first scene
+        assertThat(guestLeaves).containsExactly(0);
+        assertThat(film.getScenes()).extracting(Scene::prompt).containsExactly("written 10", "written 8");
+
+        gateway.complete(film);
+        gateway.awaitRunning();
+        gateway.complete(film);
+        await().until(() -> film.getStatus() == JobStatus.DONE);
+        assertThat(storyboarded).hasSize(1);
+    }
+
+    @Test
+    void aFailedSceneIsTriedOnceMoreThenTheVideoFails() throws InterruptedException {
+        Job film = longVideo(1, "film", new Scene(10, "plays", null), new Scene(10, "stands up", null));
+        queue.submit(film);
+        gateway.awaitRunning();
+
+        gateway.fail(film, "out of memory");
+        gateway.awaitRunning();
+        gateway.complete(film);
+        gateway.awaitRunning();
+        assertThat(gateway.started).containsExactly("film#scene1", "film#scene1", "film#scene2");
+
+        gateway.fail(film, "out of memory");
+        gateway.awaitRunning();
+        gateway.fail(film, "out of memory");
+
+        await().until(() -> film.getStatus() == JobStatus.FAILED);
+        assertThat(film.getError()).isEqualTo("out of memory");
+        assertThat(gateway.discarded).containsExactly(film);
+    }
+
+    @Test
+    void aFailedJoinIsTriedAgainWithoutMakingTheScenesAgain() throws InterruptedException {
+        gateway.joinFailures = 1;
+        Job film = longVideo(1, "film", new Scene(10, "plays", null), new Scene(10, "stands up", null));
+        queue.submit(film);
+        gateway.awaitRunning();
+        gateway.complete(film);
+        gateway.awaitRunning();
+        gateway.complete(film);
+
+        await().until(() -> film.getStatus() == JobStatus.DONE);
+        assertThat(gateway.started).containsExactly("film#scene1", "film#scene2", "film#join", "film#join");
+    }
+
+    @Test
+    void aLongVideoCancelledBetweenTwoScenesLeavesNoScenes() throws InterruptedException {
+        Job film = longVideo(1, "film", new Scene(10, "plays", null), new Scene(10, "stands up", null));
+        Job other = job(2, "other");
+        queue.submit(film);
+        gateway.awaitRunning();
+        queue.submit(other);
+        gateway.complete(film);
+        gateway.awaitRunning();
+
+        assertThat(queue.cancel(film)).isTrue();
+
+        assertThat(film.getStatus()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(gateway.discarded).containsExactly(film);
+        gateway.complete(other);
+        await().until(() -> other.getStatus() == JobStatus.DONE);
+        assertThat(gateway.started).containsExactly("film#scene1", "other");
+    }
+
+    @Test
+    void russianScenesAreTranslatedOnceAndTheWholePromptNot() throws InterruptedException {
+        Job film = longVideo(1, "film", new Scene(10, "играет на гитаре", null), new Scene(10, "stands up", null));
+        queue.submit(film);
+        gateway.awaitRunning();
+        gateway.complete(film);
+        gateway.awaitRunning();
+        gateway.complete(film);
+
+        await().until(() -> film.getStatus() == JobStatus.DONE);
+        assertThat(film.getScenes()).extracting(Scene::modelPrompt)
+                .containsExactly("EN:играет на гитаре", "stands up");
+        assertThat(translator.calls).isEqualTo(1);
+        assertThat(film.getTranslations()).isEmpty();
     }
 
     @Test

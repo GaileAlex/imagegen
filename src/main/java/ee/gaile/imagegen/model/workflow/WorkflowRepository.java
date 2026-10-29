@@ -45,8 +45,12 @@ public class WorkflowRepository {
                 throw new IllegalStateException("Workflow " + id + " has no output node " + output);
             }
             String anchor = description.path("keepFace").asString("");
+            String decoded = description.path("decoded").asString("");
+            if (!decoded.isEmpty() && !graph.has(decoded)) {
+                throw new IllegalStateException("Workflow " + id + " has no decoded node " + decoded);
+            }
             return new WorkflowTemplate(id, graph, output, params,
-                    anchor.isEmpty() ? null : FaceAnchor.valueOf(anchor));
+                    anchor.isEmpty() ? null : FaceAnchor.valueOf(anchor), decoded.isEmpty() ? null : decoded);
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot read the workflow " + id, e);
         }
