@@ -34,12 +34,10 @@ and the catalogue in `application.yml` (`imagegen.models`):
 | `muse-edit`          | EDIT    | image         | image/png  | ~60 s                            |
 | `muse-inpaint`       | INPAINT | image + mask  | image/png  | ~60 s                            |
 | `wan22-i2v-fastmove` | VIDEO   | image         | video/mp4  | 832x480 5 s ~160 s               |
-| `wan22-i2v`          | VIDEO   | image         | video/mp4  | 832x480 5 s ~145 s               |
-| `ltx25-i2v`          | VIDEO   | image or -    | video/mp4  | 1216x704 5 s with sound ~115 s   |
-| `ltx25-nsfw-i2v`     | VIDEO   | image or -    | video/mp4  | the same, ~150 s                 |
+| `ltx25-nsfw-i2v`     | VIDEO   | image or -    | video/mp4  | 1216x704 5 s with sound ~150 s   |
 
-`wan22-i2v` (base Wan 2.2) keeps the face of a real person best of the four: Fast Move and the NSFW merges
-drift towards their own faces. Both LTX graphs condition the first frame with strength 1.0 on both stages
+Fast Move and the LTX NSFW merge drift towards their own faces (base Wan 2.2 held a real face best;
+it and the plain LTX 2.5 were removed 2026-10-29). The LTX graph conditions the first frame with strength 1.0 on both stages
 (0.7 on the first stage let the face drift).
 
 Response:

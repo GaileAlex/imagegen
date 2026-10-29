@@ -17,18 +17,18 @@ class ModelCatalogueTest {
     }
 
     @Test
-    void listsTheTenModesInTheOrderOfTheContract() {
+    void listsTheEightModesInTheOrderOfTheContract() {
         assertThat(catalogue.list()).extracting(ModelDefinition::id).containsExactly("muse-txt2img",
                 "krea2-realism-txt2img", "cyberrealistic-txt2img", "moody-txt2img",
                 "muse-edit", "muse-inpaint", "wan22-i2v-fastmove",
-                "wan22-i2v", "ltx25-i2v", "ltx25-nsfw-i2v");
+                "ltx25-nsfw-i2v");
     }
 
     @Test
     void imagesNeedNoInputInpaintNeedsAMaskAndLtxRunsFromTheTextAlone() {
         ModelDefinition txt = TestCatalogue.model("muse-txt2img");
         ModelDefinition inpaint = TestCatalogue.model("muse-inpaint");
-        ModelDefinition video = TestCatalogue.model("ltx25-i2v");
+        ModelDefinition video = TestCatalogue.model("ltx25-nsfw-i2v");
 
         assertThat(txt.kind()).isEqualTo(JobKind.IMAGE);
         assertThat(txt.needsImage()).isFalse();
@@ -73,10 +73,10 @@ class ModelCatalogueTest {
         ParamDefinition width = param("muse-txt2img", "width");
         assertThat(List.of(width.min(), width.max(), width.step())).containsExactly(512, 2048, 16);
         assertThat(param("wan22-i2v-fastmove", "seconds").max()).isEqualTo(20);
-        assertThat(param("ltx25-i2v", "seconds").max()).isEqualTo(30);
+        assertThat(param("ltx25-nsfw-i2v", "seconds").max()).isEqualTo(30);
         // longer than one clip = scenes
         assertThat(TestCatalogue.model("wan22-i2v-fastmove").clipSeconds()).isEqualTo(6);
-        assertThat(TestCatalogue.model("ltx25-i2v").clipSeconds()).isEqualTo(12);
+        assertThat(TestCatalogue.model("ltx25-nsfw-i2v").clipSeconds()).isEqualTo(12);
         assertThat(TestCatalogue.model("muse-txt2img").clipSeconds()).isNull();
     }
 
@@ -86,7 +86,7 @@ class ModelCatalogueTest {
         assertThat(orientation.type()).isEqualTo(ParamType.ENUM);
         assertThat(orientation.options()).containsExactly("landscape", "portrait");
         assertThat(orientation.defaultValue()).isEqualTo("landscape");
-        assertThat(param("ltx25-i2v", "seconds").defaultValue()).isEqualTo(5);
+        assertThat(param("ltx25-nsfw-i2v", "seconds").defaultValue()).isEqualTo(5);
     }
 
     @Test

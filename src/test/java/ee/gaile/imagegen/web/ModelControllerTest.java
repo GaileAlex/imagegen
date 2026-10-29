@@ -28,7 +28,7 @@ class ModelControllerTest {
 
         mockMvc.perform(get("/api/models"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(10))
+                .andExpect(jsonPath("$.length()").value(8))
                 .andExpect(jsonPath("$[0].id").value("muse-txt2img"))
                 .andExpect(jsonPath("$[0].kind").value("IMAGE"))
                 .andExpect(jsonPath("$[0].needsImage").value(false))
@@ -45,7 +45,7 @@ class ModelControllerTest {
                 .andExpect(jsonPath("$[0].params[6].default").doesNotExist())
                 .andExpect(jsonPath("$[5].kind").value("INPAINT"))
                 .andExpect(jsonPath("$[5].needsMask").value(true))
-                .andExpect(jsonPath("$[9].outputType").value("video/mp4"))
-                .andExpect(jsonPath("$[9].params[3].options[1]").value("portrait"));
+                .andExpect(jsonPath("$[7].outputType").value("video/mp4"))
+                .andExpect(jsonPath("$[7].params[3].options[1]").value("portrait"));
     }
 }

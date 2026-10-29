@@ -142,7 +142,7 @@ imagegen:
     - id: wan22-i2v-fastmove
       kind: VIDEO
       title: Wan 2.2 Fast Move
-      description: Video from a start image, lively motion, no sound; the face of a real person may drift (Wan 2.2 keeps it better). 832x480 (16 fps).
+      description: Video from a start image, lively motion, no sound; the face of a real person may drift. 832x480 (16 fps).
       typical-seconds: 160
       prompt-style: WAN
       clip-seconds: 6
@@ -155,42 +155,10 @@ imagegen:
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
         - { name: keepFace, type: BOOL, default: 'false' }
         - { name: seed, type: SEED }
-    - id: wan22-i2v
-      kind: VIDEO
-      title: Wan 2.2
-      description: Video from a start image that keeps the face of a real person best; calmer motion than Fast Move, no sound. 832x480 (16 fps).
-      typical-seconds: 145
-      prompt-style: WAN
-      clip-seconds: 6
-      scene-seconds: 5
-      params:
-        - { name: prompt, type: TEXT, required: true }
-        - { name: negativePrompt, type: TEXT }
-        - { name: seconds, type: INT, default: '5', min: 2, max: 20 }
-        - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
-        - { name: keepFace, type: BOOL, default: 'false' }
-        - { name: seed, type: SEED }
-    - id: ltx25-i2v
-      kind: VIDEO
-      title: LTX 2.5
-      description: Video with sound from a text, or from a start image when one is given. 1216x704 (24 fps).
-      typical-seconds: 115
-      prompt-style: LTX
-      clip-seconds: 12
-      # 10 s plus the 17 frames it starts from stay below a plain 12 s clip in the VRAM
-      scene-seconds: 10
-      image-optional: true
-      params:
-        - { name: prompt, type: TEXT, required: true }
-        - { name: negativePrompt, type: TEXT }
-        - { name: seconds, type: INT, default: '5', min: 2, max: 30 }
-        - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
-        - { name: keepFace, type: BOOL, default: 'false' }
-        - { name: seed, type: SEED }
     - id: ltx25-nsfw-i2v
       kind: VIDEO
       title: LTX 2.5 NSFW
-      description: LTX 2.5 with NSFW fine-tunes merged in, for nude and explicit scenes (the plain LTX blurs and dodges them). Sound, 1216x704 (24 fps); from a text or a start image.
+      description: LTX 2.5 with NSFW fine-tunes merged in, also fine for scenes without nudity. Sound, 1216x704 (24 fps); from a text or a start image.
       typical-seconds: 150
       prompt-style: LTX
       clip-seconds: 12

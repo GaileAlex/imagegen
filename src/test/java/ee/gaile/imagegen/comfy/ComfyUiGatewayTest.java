@@ -130,9 +130,9 @@ class ComfyUiGatewayTest {
 
     @Test
     void ltxGetsFramesAndHalfSizeInTheirNodes() {
-        Job job = job("ltx25-i2v", params("prompt", "walks", "seconds", 2, "orientation", "portrait", "seed", 1),
+        Job job = job("ltx25-nsfw-i2v", params("prompt", "walks", "seconds", 2, "orientation", "portrait", "seed", 1),
                 null);
-        var template = new WorkflowRepository(MAPPER).get("ltx25-i2v");
+        var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
 
         ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
 
@@ -148,10 +148,10 @@ class ComfyUiGatewayTest {
 
     @Test
     void wanKeepsTheFaceWithTheStartImageAsTheLastFrame() {
-        var template = new WorkflowRepository(MAPPER).get("wan22-i2v");
-        Job kept = job("wan22-i2v", params("prompt", "walks", "keepFace", true), null);
+        var template = new WorkflowRepository(MAPPER).get("wan22-i2v-fastmove");
+        Job kept = job("wan22-i2v-fastmove", params("prompt", "walks", "keepFace", true), null);
         // off by default: it holds the person to the pose of the picture
-        Job free = job("wan22-i2v", params("prompt", "walks"), null);
+        Job free = job("wan22-i2v-fastmove", params("prompt", "walks"), null);
 
         ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(kept));
         ObjectNode plain = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(free));
@@ -195,8 +195,8 @@ class ComfyUiGatewayTest {
 
     @Test
     void ltxFromTheTextAloneHasNoFaceToKeep() {
-        var template = new WorkflowRepository(MAPPER).get("ltx25-i2v");
-        Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-i2v"),
+        var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
+        Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-nsfw-i2v"),
                 params("prompt", "walks", "keepFace", true), null, false);
 
         ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
@@ -208,7 +208,7 @@ class ComfyUiGatewayTest {
 
     @Test
     void ltxWithoutAStartImageSkipsTheImageNodesAndUploadsAPlaceholder() {
-        Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-i2v"),
+        Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-nsfw-i2v"),
                 params("prompt", "walks", "seconds", 2), null, false);
         server.expect(requestTo(BASE + "/upload/image"))
                 .andExpect(content().string(containsString(job.getId() + ".input.png")))
@@ -460,7 +460,7 @@ class ComfyUiGatewayTest {
     }
 
     private Job longVideo() {
-        Job job = job("ltx25-i2v", params("prompt", "a story", "seconds", 20, "seed", 5, "orientation", "portrait"),
+        Job job = job("ltx25-nsfw-i2v", params("prompt", "a story", "seconds", 20, "seed", 5, "orientation", "portrait"),
                 null);
         job.setScenes(List.of(new Scene(10, "he plays", null), new Scene(10, "he stands up", null)));
         return job;
