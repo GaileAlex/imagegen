@@ -3,11 +3,13 @@ package ee.gaile.imagegen.web;
 import ee.gaile.imagegen.web.dto.JobView;
 import ee.gaile.imagegen.web.dto.SubmitResponse;
 import ee.gaile.imagegen.config.ImagegenProperties;
+import ee.gaile.imagegen.image.Thumbnails;
 import ee.gaile.imagegen.service.InvalidParamsException;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.JobQueue;
+import ee.gaile.imagegen.job.JobResult;
 import ee.gaile.imagegen.service.JobService;
 import ee.gaile.imagegen.job.JobStatus;
 import ee.gaile.imagegen.storage.JobStore;
@@ -52,11 +54,15 @@ public class JobController {
     private static final DateTimeFormatter FILE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
             .withZone(ZoneOffset.UTC);
     private static final int MAX_LIST = 200;
+    // The files of a job never change once written (a new job gets a new id), but they are the user's own
+    // pictures: kept by the browser for good, never by a shared cache
+    private static final String UNCHANGING = "private, max-age=31536000, immutable";
 
     private final JobService service;
     private final JobStore store;
     private final JobQueue queue;
     private final JobFiles files;
+    private final Thumbnails thumbnails;
     private final ImagegenProperties properties;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -87,23 +93,26 @@ public class JobController {
     public ResponseEntity<Resource> result(@RequestHeader("X-User-Id") long userId, @PathVariable UUID id,
                                            @RequestParam(defaultValue = "false") boolean download) {
         Job job = own(userId, id);
-        if (job.getStatus() != JobStatus.DONE || job.getResult() == null) {
-            throw new NotFoundException("The job has no result");
-        }
-        String contentType = job.getResult().contentType();
+        String contentType = resultOf(job).contentType();
         Path file = files.result(id, contentType);
-        if (!Files.isRegularFile(file)) {
-            throw new NotFoundException("The result file is gone");
-        }
         String name = "%s-%s-%d.%s".formatted(job.getModel(), FILE_TIME.format(job.getFinishedAt()), job.getSeed(),
                 JobFiles.extension(contentType));
         ContentDisposition disposition = (download ? ContentDisposition.attachment() : ContentDisposition.inline())
                 .filename(name).build();
-        // A finished result never changes, but it is the user's own picture: no shared caches
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                .header(HttpHeaders.CACHE_CONTROL, UNCHANGING)
                 .contentType(MediaType.parseMediaType(contentType))
+                .body(new FileSystemResource(file));
+    }
+
+    /** A small JPEG of the result (a video: its first frame), made on the first request */
+    @GetMapping("/{id}/thumbnail")
+    public ResponseEntity<Resource> thumbnail(@RequestHeader("X-User-Id") long userId, @PathVariable UUID id) {
+        Path file = thumbnails.of(id, resultOf(own(userId, id)));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, UNCHANGING)
+                .contentType(MediaType.IMAGE_JPEG)
                 .body(new FileSystemResource(file));
     }
 
@@ -115,7 +124,7 @@ public class JobController {
             throw new NotFoundException("The job has no input image");
         }
         return ResponseEntity.ok()
-                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                .header(HttpHeaders.CACHE_CONTROL, UNCHANGING)
                 .contentType(MediaType.IMAGE_PNG)
                 .body(new FileSystemResource(file));
     }
@@ -155,6 +164,17 @@ public class JobController {
     private Job own(long userId, UUID id) {
         return store.find(id).filter(job -> job.getUserId() == userId)
                 .orElseThrow(() -> new NotFoundException("No such job"));
+    }
+
+    /** The result of a finished job whose file is still there */
+    private JobResult resultOf(Job job) {
+        if (job.getStatus() != JobStatus.DONE || job.getResult() == null) {
+            throw new NotFoundException("The job has no result");
+        }
+        if (!Files.isRegularFile(files.result(job.getId(), job.getResult().contentType()))) {
+            throw new NotFoundException("The result file is gone");
+        }
+        return job.getResult();
     }
 
     private JobView view(Job job) {

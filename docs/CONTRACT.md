@@ -167,6 +167,16 @@ any age.
 The file (`image/png` or `video/mp4`), `Content-Disposition: attachment; filename="<model>-<yyyyMMdd-HHmmss>-<seed>.<ext>"` (time in UTC)
 with `?download=true`, `inline` otherwise. Supports `Range` (video seeking). 404 unless DONE.
 
+### `GET /api/jobs/{id}/thumbnail`
+
+A small JPEG of the result for the history cards: the shorter side scaled down to 480 px, a video gives its first
+frame (decoded by JCodec in Java, no ffmpeg in the image). Made on the first request (~0.1 s) and kept as
+`<jobId>.thumbnail.jpg`; one is made at a time. 404 unless DONE, 500 `thumbnail_failed` when the result cannot be
+decoded.
+
+The result, the input and the thumbnail never change once written: they are sent with
+`Cache-Control: private, max-age=31536000, immutable`, so the browser keeps them across visits.
+
 ### `GET /api/jobs/{id}/input`
 
 The input image the job used (png), for the history card of an edit / video. 404 for IMAGE jobs.
@@ -273,7 +283,8 @@ service deletes the inputs after the prompt and the output once downloaded (`Com
 
 Volume `imagegen-results` mounted at `/data`:
 - `/data/jobs/<jobId>.json` - the job record (everything of `GET /api/jobs/{id}` plus the user id)
-- `/data/jobs/<jobId>.png|.mp4` - the result, `<jobId>.input.png` / `<jobId>.mask.png` - the inputs
+- `/data/jobs/<jobId>.png|.mp4` - the result, `<jobId>.input.png` / `<jobId>.mask.png` - the inputs,
+  `<jobId>.thumbnail.jpg` - the thumbnail of the result (made on the first request)
 
 No database: the record is a small file next to the result, so both disappear together. Loaded into memory at
 start; a record QUEUED or RUNNING at start becomes FAILED (`"error": "service restarted"`). An hourly job deletes
@@ -283,4 +294,4 @@ everything finished more than 10 days ago (`imagegen.retention`), except the pin
 
 `/api/image-generation/**` mirrors the endpoints above one to one (same paths after the prefix, same bodies), only for
 ROLE_ADMIN and ROLE_ELITE (403 otherwise, guests 401), adds `X-User-Id`/`X-User-Name`, streams the result and input
-files through (with `Range`). No table in cv-app.
+files through (with `Range`) and passes `Cache-Control` on. No table in cv-app.

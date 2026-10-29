@@ -1,6 +1,7 @@
 package ee.gaile.imagegen.web;
 
 import ee.gaile.imagegen.idea.IdeaUnavailableException;
+import ee.gaile.imagegen.image.ThumbnailFailedException;
 import ee.gaile.imagegen.web.dto.ErrorBody;
 import ee.gaile.imagegen.service.ComfyUnavailableException;
 import ee.gaile.imagegen.service.InvalidParamsException;
@@ -65,6 +66,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ErrorBody> conflict(ConflictException e) {
         return body(HttpStatus.CONFLICT, e.code(), e.getMessage());
+    }
+
+    @ExceptionHandler(ThumbnailFailedException.class)
+    public ResponseEntity<ErrorBody> thumbnailFailed(ThumbnailFailedException e) {
+        log.warn("Thumbnail not made: {}", e.getMessage());
+        return body(HttpStatus.INTERNAL_SERVER_ERROR, "thumbnail_failed", e.getMessage());
     }
 
     @ExceptionHandler(NotFoundException.class)

@@ -1,5 +1,7 @@
 package ee.gaile.imagegen.web;
 
+import ee.gaile.imagegen.image.ThumbnailFailedException;
+import ee.gaile.imagegen.image.Thumbnails;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.JobQueue;
 import ee.gaile.imagegen.job.JobResult;
@@ -74,6 +76,8 @@ class JobControllerTest {
     private JobQueue queue;
     @MockitoBean
     private JobFiles files;
+    @MockitoBean
+    private Thumbnails thumbnails;
 
     @BeforeEach
     void setUp() {
@@ -241,6 +245,7 @@ class JobControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentType("image/png"))
                 .andExpect(content().bytes(new byte[]{9, 8, 7, 6}))
+                .andExpect(header().string("Cache-Control", "private, max-age=31536000, immutable"))
                 .andExpect(header().string("Content-Disposition",
                         "inline; filename=\"muse-txt2img-20261026-120105-123456789.png\""));
         mockMvc.perform(get("/api/jobs/" + ID + "/result?download=true").header("X-User-Id", "7"))
@@ -272,6 +277,45 @@ class JobControllerTest {
         // done, but the file was deleted
         given(store.find(ID)).willReturn(Optional.of(done(7, JobKind.IMAGE)));
         mockMvc.perform(get("/api/jobs/" + ID + "/result").header("X-User-Id", "7")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void thumbnailIsTheJpegOfAFinishedJobKeptByTheBrowser() throws Exception {
+        Files.write(directory.resolve("result.mp4"), new byte[]{1});
+        Files.write(directory.resolve("thumbnail.jpg"), new byte[]{(byte) 0xFF, (byte) 0xD8, 3});
+        Job job = done(7, JobKind.VIDEO);
+        given(store.find(ID)).willReturn(Optional.of(job));
+        given(thumbnails.of(ID, job.getResult())).willReturn(directory.resolve("thumbnail.jpg"));
+
+        mockMvc.perform(get("/api/jobs/" + ID + "/thumbnail").header("X-User-Id", "7"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.IMAGE_JPEG))
+                .andExpect(content().bytes(new byte[]{(byte) 0xFF, (byte) 0xD8, 3}))
+                .andExpect(header().string("Cache-Control", "private, max-age=31536000, immutable"));
+    }
+
+    @Test
+    void thumbnailIs404UnlessDoneAndOwnedAndPresentAnd500WhenItFails() throws Exception {
+        given(store.find(ID)).willReturn(Optional.of(job(7, JobKind.IMAGE, JobStatus.RUNNING)));
+        mockMvc.perform(get("/api/jobs/" + ID + "/thumbnail").header("X-User-Id", "7"))
+                .andExpect(status().isNotFound());
+
+        Files.write(directory.resolve("result.png"), new byte[]{1});
+        given(store.find(ID)).willReturn(Optional.of(done(8, JobKind.IMAGE)));
+        mockMvc.perform(get("/api/jobs/" + ID + "/thumbnail").header("X-User-Id", "7"))
+                .andExpect(status().isNotFound());
+
+        Job job = done(7, JobKind.IMAGE);
+        given(store.find(ID)).willReturn(Optional.of(job));
+        given(thumbnails.of(ID, job.getResult())).willThrow(new ThumbnailFailedException("broken"));
+        mockMvc.perform(get("/api/jobs/" + ID + "/thumbnail").header("X-User-Id", "7"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error").value("thumbnail_failed"));
+
+        Files.delete(directory.resolve("result.png"));
+        mockMvc.perform(get("/api/jobs/" + ID + "/thumbnail").header("X-User-Id", "7"))
+                .andExpect(status().isNotFound());
+        verify(thumbnails).of(any(), any());
     }
 
     @Test

@@ -50,6 +50,11 @@ public class JobFiles {
         return directory.resolve(id + ".mask.png");
     }
 
+    /** The small picture of the result for the history cards, made on the first request (Thumbnails) */
+    public Path thumbnail(UUID id) {
+        return directory.resolve(id + ".thumbnail.jpg");
+    }
+
     /**
      * @param contentType image/png or video/mp4
      */
