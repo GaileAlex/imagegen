@@ -174,7 +174,7 @@ class JobServiceTest {
 
     @Test
     void aVideoKeepsThePhotoUpToTheLimitAndAddsNoSize() throws IOException {
-        Job job = service.submit(1, "a", request("ltx25-i2v", "{\"prompt\":\"walks\",\"seconds\":4}"), png(3000, 1500),
+        Job job = service.submit(1, "a", request("ltx25-nsfw-i2v", "{\"prompt\":\"walks\",\"seconds\":4}"), png(3000, 1500),
                 null).job();
 
         assertThat(job.getKind()).isEqualTo(JobKind.VIDEO);
@@ -186,7 +186,7 @@ class JobServiceTest {
 
     @Test
     void ltxRunsFromTheTextAloneButWanNeedsAnImage() {
-        Job job = service.submit(1, "a", request("ltx25-i2v", "{\"prompt\":\"walks\"}"), null, null).job();
+        Job job = service.submit(1, "a", request("ltx25-nsfw-i2v", "{\"prompt\":\"walks\"}"), null, null).job();
 
         assertThat(job.getParams()).containsEntry(JobFactory.TEXT_ONLY, true);
         assertThat(files.input(job.getId())).doesNotExist();
@@ -203,7 +203,7 @@ class JobServiceTest {
         Files.write(files.result(sourceId, "image/png"), png(640, 480));
         given(store.find(sourceId)).willReturn(Optional.of(source));
 
-        Job job = service.submit(1, "a", request("ltx25-i2v", "{\"prompt\":\"x\"}").replace("}}",
+        Job job = service.submit(1, "a", request("ltx25-nsfw-i2v", "{\"prompt\":\"x\"}").replace("}}",
                 "},\"sourceJobId\":\"" + sourceId + "\"}"), null, null).job();
 
         assertThat(ImageIO.read(files.input(job.getId()).toFile()).getWidth()).isEqualTo(640);
@@ -216,7 +216,7 @@ class JobServiceTest {
         source.setStatus(JobStatus.DONE);
         source.setResult(new JobResult("image/png", 1, 640, 480, null));
         given(store.find(sourceId)).willReturn(Optional.of(source));
-        String request = "{\"model\":\"ltx25-i2v\",\"params\":{\"prompt\":\"x\"},\"sourceJobId\":\"" + sourceId + "\"}";
+        String request = "{\"model\":\"ltx25-nsfw-i2v\",\"params\":{\"prompt\":\"x\"},\"sourceJobId\":\"" + sourceId + "\"}";
 
         assertThatThrownBy(() -> service.submit(1, "a", request, null, null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("sourceJobId");

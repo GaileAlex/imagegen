@@ -43,7 +43,7 @@ class JobStoryboardsTest {
 
     private Job longVideo(boolean withPicture) throws IOException {
         Job job = new JobFactory(Clock.systemUTC()).create(UUID.randomUUID(), 1, "u",
-                TestCatalogue.model("ltx25-i2v"), new HashMap<>(Map.of("prompt", "он играет и машет",
+                TestCatalogue.model("ltx25-nsfw-i2v"), new HashMap<>(Map.of("prompt", "он играет и машет",
                         "seconds", 20)), null, withPicture);
         if (withPicture) {
             ImageIO.write(new BufferedImage(64, 96, BufferedImage.TYPE_INT_RGB), "png", files.input(job.getId()).toFile());

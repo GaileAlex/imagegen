@@ -104,17 +104,17 @@ class JobFactoryTest {
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 21)))
                 .isInstanceOf(InvalidParamsException.class);
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 31)))
+        assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", "seconds", 31)))
                 .isInstanceOf(InvalidParamsException.class);
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "seconds", 1)))
+        assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", "seconds", 1)))
                 .isInstanceOf(InvalidParamsException.class);
     }
 
     @Test
     void ltxWithoutAnImageIsMarkedTextOnly() {
-        Job textOnly = factory.create(UUID.randomUUID(), 7, "alex", TestCatalogue.model("ltx25-i2v"),
+        Job textOnly = factory.create(UUID.randomUUID(), 7, "alex", TestCatalogue.model("ltx25-nsfw-i2v"),
                 params("prompt", "x"), null, false);
-        Job fromImage = create("ltx25-i2v", params("prompt", "x"));
+        Job fromImage = create("ltx25-nsfw-i2v", params("prompt", "x"));
 
         assertThat(textOnly.getParams()).containsEntry(JobFactory.TEXT_ONLY, true);
         assertThat(fromImage.getParams()).doesNotContainKey(JobFactory.TEXT_ONLY);
@@ -122,10 +122,10 @@ class JobFactoryTest {
 
     @Test
     void videosKeepTheFaceOnlyWhenTheClientTurnsItOn() {
-        assertThat(create("wan22-i2v", params("prompt", "x")).getParams()).containsEntry("keepFace", false);
-        assertThat(create("ltx25-i2v", params("prompt", "x", "keepFace", true)).getParams())
+        assertThat(create("wan22-i2v-fastmove", params("prompt", "x")).getParams()).containsEntry("keepFace", false);
+        assertThat(create("ltx25-nsfw-i2v", params("prompt", "x", "keepFace", true)).getParams())
                 .containsEntry("keepFace", true);
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "keepFace", "yes")))
+        assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", "keepFace", "yes")))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("keepFace");
         assertThatThrownBy(() -> create("muse-txt2img", params("prompt", "x", "keepFace", true)))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Unknown param");
@@ -140,7 +140,7 @@ class JobFactoryTest {
 
     @Test
     void theClientCannotSetTextOnly() {
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", JobFactory.TEXT_ONLY, true)))
+        assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", JobFactory.TEXT_ONLY, true)))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Unknown param");
     }
 
@@ -150,7 +150,7 @@ class JobFactoryTest {
 
         assertThat(job.getParams()).containsEntry("steps", 8).containsEntry("cfg", 4.0)
                 .containsEntry("width", 512).containsEntry("height", 2048);
-        assertThat(create("ltx25-i2v", params("prompt", "x", "seconds", 12)).getParams()).containsEntry("seconds", 12);
+        assertThat(create("ltx25-nsfw-i2v", params("prompt", "x", "seconds", 12)).getParams()).containsEntry("seconds", 12);
     }
 
     @Test
@@ -174,9 +174,9 @@ class JobFactoryTest {
 
     @Test
     void theEnumTakesOnlyItsOptions() {
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "x", "orientation", "square")))
+        assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", "orientation", "square")))
                 .isInstanceOf(InvalidParamsException.class);
-        assertThat(create("ltx25-i2v", params("prompt", "x", "orientation", "portrait")).getParams())
+        assertThat(create("ltx25-nsfw-i2v", params("prompt", "x", "orientation", "portrait")).getParams())
                 .containsEntry("orientation", "portrait");
     }
 
@@ -219,15 +219,15 @@ class JobFactoryTest {
 
     @Test
     void aVideoUpToOneClipHasNoScenes() {
-        assertThat(create("ltx25-i2v", params("prompt", "x", "seconds", 12)).getScenes()).isNull();
-        assertThat(create("wan22-i2v", params("prompt", "x", "seconds", 6)).getScenes()).isNull();
+        assertThat(create("ltx25-nsfw-i2v", params("prompt", "x", "seconds", 12)).getScenes()).isNull();
+        assertThat(create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 6)).getScenes()).isNull();
         assertThat(create("muse-txt2img", params("prompt", "[Scene 1 · 5 s]\na\n[Scene 2 · 5 s]\nb")).getScenes())
                 .isNull();
     }
 
     @Test
     void aLongerVideoGetsEvenScenesForItsStoryboard() {
-        Job ltx = create("ltx25-i2v", params("prompt", "a man plays, then opens the window", "seconds", 30));
+        Job ltx = create("ltx25-nsfw-i2v", params("prompt", "a man plays, then opens the window", "seconds", 30));
         Job wan = create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 13));
 
         assertThat(ltx.getScenes()).containsExactly(new Scene(10, null, null), new Scene(10, null, null),
@@ -247,7 +247,7 @@ class JobFactoryTest {
 
     @Test
     void oneWrittenSceneIsAPlainClip() {
-        Job job = create("ltx25-i2v", params("prompt", "[Scene 1 · 5 s]\nhe plays", "seconds", 5));
+        Job job = create("ltx25-nsfw-i2v", params("prompt", "[Scene 1 · 5 s]\nhe plays", "seconds", 5));
 
         assertThat(job.getScenes()).isNull();
         assertThat(job.getParams()).containsEntry("prompt", "he plays");
@@ -257,7 +257,7 @@ class JobFactoryTest {
     void scenesWrittenForAnotherModelAreWrittenAgainByTheJob() {
         // the 3 x 10 s of LTX given to Wan: 5 s a scene, 20 s in all
         String ltx = "[Scene 1 · 10 s]\nhe plays\n[Scene 2 · 10 s]\nhe stands\n[Scene 3 · 10 s]\nhe waves";
-        Job wan = create("wan22-i2v", params("prompt", ltx, "seconds", 5));
+        Job wan = create("wan22-i2v-fastmove", params("prompt", ltx, "seconds", 5));
 
         assertThat(wan.getScenes()).containsExactly(new Scene(5, null, null), new Scene(5, null, null),
                 new Scene(5, null, null), new Scene(5, null, null));
@@ -268,7 +268,7 @@ class JobFactoryTest {
     void scenesTooLongInAllAreWrittenAgainWithinTheLimit() {
         String fourScenes = "[Scene 1 · 10 s]\na\n[Scene 2 · 10 s]\nb\n[Scene 3 · 10 s]\nc\n[Scene 4 · 2 s]\nd";
 
-        Job job = create("ltx25-i2v", params("prompt", fourScenes));
+        Job job = create("ltx25-nsfw-i2v", params("prompt", fourScenes));
 
         assertThat(job.getScenes()).extracting(Scene::seconds).containsExactly(10, 10, 10);
         assertThat(job.getScenes()).extracting(Scene::prompt).containsOnlyNulls();
@@ -277,7 +277,7 @@ class JobFactoryTest {
 
     @Test
     void scenesThatDoNotFitAndFitInOneClipMakeAPlainClip() {
-        Job job = create("ltx25-i2v", params("prompt", "[Scene 1 · 1 s]\nhe plays\n[Scene 2 · 5 s]\nhe waves"));
+        Job job = create("ltx25-nsfw-i2v", params("prompt", "[Scene 1 · 1 s]\nhe plays\n[Scene 2 · 5 s]\nhe waves"));
 
         assertThat(job.getScenes()).isNull();
         assertThat(job.getParams()).containsEntry("seconds", 6).containsEntry("prompt", "he plays\nhe waves");

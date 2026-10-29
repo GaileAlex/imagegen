@@ -64,7 +64,7 @@ class PromptIdeaServiceTest {
 
     @Test
     void aFrameIdeaGivesBothPromptsFromOneAnswer() {
-        PromptIdea idea = service.write(1, request("ltx25-i2v", 8, true, "portrait", null), null);
+        PromptIdea idea = service.write(1, request("ltx25-nsfw-i2v", 8, true, "portrait", null), null);
 
         assertThat(idea).isEqualTo(new PromptIdea("frame text", "video text"));
         assertThat(writer.schemaFields).containsExactly("framePrompt", "videoPrompt");
@@ -78,7 +78,7 @@ class PromptIdeaServiceTest {
         writer.gpu = true;
         given(queue.lendGpu()).willReturn(true);
 
-        service.write(1, request("ltx25-i2v", 5, true, null, null), null);
+        service.write(1, request("ltx25-nsfw-i2v", 5, true, null, null), null);
 
         assertThat(writer.devices).containsExactly("GPU");
         verify(queue).returnGpu();
@@ -88,14 +88,14 @@ class PromptIdeaServiceTest {
     void theCpuTakesOverWhenAJobHasTheGpuOrTheGpuFails() {
         writer.gpu = true;
         given(queue.lendGpu()).willReturn(false);
-        service.write(1, request("ltx25-i2v", 5, true, null, null), null);
+        service.write(1, request("ltx25-nsfw-i2v", 5, true, null, null), null);
         assertThat(writer.devices).containsExactly("CPU");
         verify(queue, never()).returnGpu();
 
         writer.devices.clear();
         writer.gpuFails = true;
         given(queue.lendGpu()).willReturn(true);
-        PromptIdea idea = service.write(1, request("ltx25-i2v", 5, true, null, null), null);
+        PromptIdea idea = service.write(1, request("ltx25-nsfw-i2v", 5, true, null, null), null);
         assertThat(idea.videoPrompt()).isEqualTo("video text");
         assertThat(writer.devices).containsExactly("GPU", "CPU");
         verify(queue).returnGpu();
@@ -103,7 +103,7 @@ class PromptIdeaServiceTest {
 
     @Test
     void anUploadedPictureIsLookedAtAndOnlyTheVideoPromptComesBack() throws IOException {
-        PromptIdea idea = service.write(1, request("wan22-i2v", null, false, null, null), png(2000, 1000));
+        PromptIdea idea = service.write(1, request("wan22-i2v-fastmove", null, false, null, null), png(2000, 1000));
 
         assertThat(idea.framePrompt()).isNull();
         assertThat(idea.videoPrompt()).isEqualTo("video text");
@@ -116,7 +116,7 @@ class PromptIdeaServiceTest {
 
     @Test
     void withAPictureTheIdeaMayBeEmptyAndTheModelChoosesTheAction() throws IOException {
-        PromptIdea idea = service.write(1, "{\"idea\":\"  \",\"videoModel\":\"wan22-i2v\"}", png(640, 480));
+        PromptIdea idea = service.write(1, "{\"idea\":\"  \",\"videoModel\":\"wan22-i2v-fastmove\"}", png(640, 480));
 
         assertThat(idea.videoPrompt()).isEqualTo("video text");
         assertThat(writer.schemaFields).containsExactly("picture", "living", "action", "videoPrompt");
@@ -133,14 +133,14 @@ class PromptIdeaServiceTest {
         writer.answers.put("videoPrompt", "The camera pans across the bed. No person enters the frame. "
                 + "The light dims! Nothing else moves. There are no sounds.");
 
-        PromptIdea idea = service.write(1, "{\"videoModel\":\"wan22-i2v\"}", png(640, 480));
+        PromptIdea idea = service.write(1, "{\"videoModel\":\"wan22-i2v-fastmove\"}", png(640, 480));
 
         assertThat(idea.videoPrompt()).isEqualTo("The camera pans across the bed. The light dims!");
 
         // with someone in the picture the prompt is left as it is
         writer.answers.put("living", "a man");
         writer.answers.put("videoPrompt", "The man laughs. Nobody else is around.");
-        assertThat(service.write(1, "{\"videoModel\":\"wan22-i2v\"}", png(640, 480)).videoPrompt())
+        assertThat(service.write(1, "{\"videoModel\":\"wan22-i2v-fastmove\"}", png(640, 480)).videoPrompt())
                 .isEqualTo("The man laughs. Nobody else is around.");
     }
 
@@ -155,7 +155,7 @@ class PromptIdeaServiceTest {
         Files.write(files.result(sourceId, "image/png"), png(640, 480));
         given(store.find(sourceId)).willReturn(Optional.of(source));
 
-        service.write(1, request("ltx25-i2v", 5, false, null, sourceId), null);
+        service.write(1, request("ltx25-nsfw-i2v", 5, false, null, sourceId), null);
 
         assertThat(writer.user).endsWith("The picture was generated from this prompt: a cat on a sofa");
         assertThat(writer.picture).isNotNull();
@@ -178,13 +178,13 @@ class PromptIdeaServiceTest {
         assertThatThrownBy(() -> service.write(1, request("muse-txt2img", 5, true, null, null), null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Not a video model");
         // without a picture there is nothing to go on
-        assertThatThrownBy(() -> service.write(1, "{\"idea\":\"  \",\"videoModel\":\"ltx25-i2v\",\"frame\":true}",
+        assertThatThrownBy(() -> service.write(1, "{\"idea\":\"  \",\"videoModel\":\"ltx25-nsfw-i2v\",\"frame\":true}",
                 null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("empty");
         assertThatThrownBy(() -> service.write(1, "{\"videoModel\":\"ltx25-nsfw-i2v\"}", null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("empty");
         assertThatThrownBy(() -> service.write(1, "{\"idea\":\"" + "a".repeat(1001)
-                + "\",\"videoModel\":\"ltx25-i2v\"}", null))
+                + "\",\"videoModel\":\"ltx25-nsfw-i2v\"}", null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("longer");
         assertThatThrownBy(() -> service.write(1, "{ not json", null))
                 .isInstanceOf(InvalidParamsException.class);
@@ -199,13 +199,13 @@ class PromptIdeaServiceTest {
         source.setResult(new JobResult("image/png", 1, 640, 480, null));
         given(store.find(sourceId)).willReturn(Optional.of(source));
 
-        assertThatThrownBy(() -> service.write(1, request("ltx25-i2v", 5, false, null, sourceId), null))
+        assertThatThrownBy(() -> service.write(1, request("ltx25-nsfw-i2v", 5, false, null, sourceId), null))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("sourceJobId");
     }
 
     @Test
     void aVideoLongerThanOneClipGetsItsScenesWrittenOutFromOneAnswer() {
-        PromptIdea idea = service.write(1, request("ltx25-i2v", 30, true, null, null), null);
+        PromptIdea idea = service.write(1, request("ltx25-nsfw-i2v", 30, true, null, null), null);
 
         assertThat(writer.schemaFields).containsExactly("framePrompt", "cast", "place", "sound", "story", "scene1",
                 "scene1End", "scene2", "scene2End", "scene3");

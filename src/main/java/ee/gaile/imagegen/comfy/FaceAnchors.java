@@ -12,8 +12,8 @@ import java.util.List;
 
 /**
  * Rewires a filled video workflow so that it keeps the face of the start image, see {@link FaceAnchor}. The node ids
- * are those of the graphs that name the anchor in their params file: wan22-i2v and wan22-i2v-fastmove share one
- * layout, ltx25-i2v and ltx25-nsfw-i2v another.
+ * are those of the graphs that name the anchor in their params file: wan22-i2v-fastmove has one layout,
+ * ltx25-nsfw-i2v another.
  */
 @UtilityClass
 public class FaceAnchors {

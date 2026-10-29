@@ -64,9 +64,9 @@ class WorkflowValuesTest {
 
     @Test
     void ltxSecondsBecomeFramesAt24FpsWithHalfSizeFirstStage() {
-        Map<String, Object> landscape = WorkflowValues.of(job("ltx25-i2v", JobKind.VIDEO,
+        Map<String, Object> landscape = WorkflowValues.of(job("ltx25-nsfw-i2v", JobKind.VIDEO,
                 "seconds", 5, "orientation", "landscape"));
-        Map<String, Object> portrait = WorkflowValues.of(job("ltx25-i2v", JobKind.VIDEO,
+        Map<String, Object> portrait = WorkflowValues.of(job("ltx25-nsfw-i2v", JobKind.VIDEO,
                 "seconds", 8, "orientation", "portrait"));
 
         assertThat(landscape).containsEntry("frames", 121).containsEntry("width", 1216).containsEntry("height", 704)
@@ -80,7 +80,7 @@ class WorkflowValuesTest {
         for (int seconds = 2; seconds <= 8; seconds++) {
             int wan = (Integer) WorkflowValues.of(job("wan22-i2v-fastmove", JobKind.VIDEO, "seconds", seconds,
                     "orientation", "landscape")).get("frames");
-            int ltx = (Integer) WorkflowValues.of(job("ltx25-i2v", JobKind.VIDEO, "seconds", seconds,
+            int ltx = (Integer) WorkflowValues.of(job("ltx25-nsfw-i2v", JobKind.VIDEO, "seconds", seconds,
                     "orientation", "landscape")).get("frames");
             assertThat((wan - 1) % 4).isZero();
             assertThat((ltx - 1) % 8).isZero();
@@ -90,7 +90,7 @@ class WorkflowValuesTest {
     @Test
     void halfSizesAreMultiplesOf32() {
         for (String orientation : new String[]{"landscape", "portrait"}) {
-            Map<String, Object> values = WorkflowValues.of(job("ltx25-i2v", JobKind.VIDEO, "seconds", 5,
+            Map<String, Object> values = WorkflowValues.of(job("ltx25-nsfw-i2v", JobKind.VIDEO, "seconds", 5,
                     "orientation", orientation));
             assertThat((Integer) values.get("halfWidth") % 32).isZero();
             assertThat((Integer) values.get("halfHeight") % 32).isZero();
@@ -99,7 +99,7 @@ class WorkflowValuesTest {
 
     @Test
     void theFirstSceneStartsFromTheStartImageAndTheNextFromTheTailOfTheOneBefore() {
-        Job job = job("ltx25-i2v", JobKind.VIDEO, "prompt", "the whole story", "seconds", 20,
+        Job job = job("ltx25-nsfw-i2v", JobKind.VIDEO, "prompt", "the whole story", "seconds", 20,
                 "orientation", "portrait", "keepFace", true, JobFactory.TEXT_ONLY, true);
         job.setScenes(List.of(new Scene(10, "he plays", null), new Scene(10, "он встаёт", "he stands up")));
 
@@ -120,7 +120,7 @@ class WorkflowValuesTest {
     @Test
     void sceneFramesSatisfyTheRulesOfTheModels() {
         for (int seconds = 2; seconds <= 10; seconds++) {
-            for (String model : new String[]{"wan22-i2v", "ltx25-nsfw-i2v"}) {
+            for (String model : new String[]{"wan22-i2v-fastmove", "ltx25-nsfw-i2v"}) {
                 Job job = job(model, JobKind.VIDEO, "seconds", 2 * seconds, "orientation", "landscape");
                 job.setScenes(List.of(new Scene(seconds, "a", null), new Scene(seconds, "b", null)));
                 int step = model.startsWith("ltx") ? 8 : 4;

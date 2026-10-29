@@ -87,7 +87,7 @@ class JobControllerTest {
     }
 
     private Job job(long userId, JobKind kind, JobStatus status) {
-        Job job = new Job(ID, userId, "alex", kind == JobKind.VIDEO ? "ltx25-i2v" : "muse-txt2img", kind,
+        Job job = new Job(ID, userId, "alex", kind == JobKind.VIDEO ? "ltx25-nsfw-i2v" : "muse-txt2img", kind,
                 Map.of("prompt", "a cat", "steps", 16), 123456789L, CREATED);
         job.setStatus(status);
         if (status.isFinished()) {
