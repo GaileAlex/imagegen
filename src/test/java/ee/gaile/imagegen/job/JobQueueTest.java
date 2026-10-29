@@ -319,6 +319,37 @@ public class JobQueueTest {
     }
 
     @Test
+    void aLaterJobOfTheSameUserWaitsUntilTheLongVideoIsDone() throws InterruptedException {
+        Job film = longVideo(1, "film", new Scene(10, "plays", null), new Scene(10, "stands up", null));
+        Job next = longVideo(1, "next", new Scene(5, null, null), new Scene(5, null, null));
+        Job other = job(2, "other");
+        queue.submit(film);
+        gateway.awaitRunning();
+        queue.submit(next);
+        queue.submit(other);
+
+        gateway.complete(film);
+        assertThat(gateway.awaitRunning()).isSameAs(other);
+        // the film goes on before the later job of its user
+        assertThat(queue.position(film)).isEqualTo(1);
+        assertThat(queue.position(next)).isEqualTo(2);
+
+        gateway.complete(other);
+        assertThat(gateway.awaitRunning()).isSameAs(film);
+        gateway.complete(film);
+        assertThat(gateway.awaitRunning()).isSameAs(next);
+        assertThat(film.getStatus()).isEqualTo(JobStatus.DONE);
+        assertThat(storyboarded).containsExactly(next);
+        gateway.complete(next);
+        gateway.awaitRunning();
+        gateway.complete(next);
+
+        await().until(() -> next.getStatus() == JobStatus.DONE);
+        assertThat(gateway.started).containsExactly("film#scene1", "other", "film#scene2", "film#join",
+                "next#scene1", "next#scene2", "next#join");
+    }
+
+    @Test
     void theStoryboardIsWrittenFirstOnTheFreedGpu() throws InterruptedException {
         Job film = longVideo(1, "film", new Scene(10, null, null), new Scene(8, null, null));
         queue.submit(film);

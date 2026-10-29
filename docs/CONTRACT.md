@@ -231,7 +231,8 @@ of a scene.
 - A scene typed with Cyrillic is translated once (`english` of the scene); `prompt` of a long video itself is not.
 - `keepFace` is ignored; scene N has the seed + N - 1.
 - The queue runs one scene per turn: between two scenes the job goes back into the queue (`status` stays RUNNING,
-  `progress.phase` `WAITING`, `position` its place), so it holds the other users up by one scene at most. A failed
+  `progress.phase` `WAITING`, `position` its place), so it holds the other users up by one scene at most; it stays
+  ahead of the later jobs of its own user, which start only after its join. A failed
   step (the storyboard or a scene) is tried once more; a second failure fails the job. The join runs right after the
   last scene (`JOINING`, ~20 s, ComfyUI core `LoadVideo`, `Video Slice`, `ConcatenateVideo`, sound included).
 - `progress.scene` / `progress.scenes`: the scene the phase belongs to and how many (absent for a single clip).

@@ -368,7 +368,9 @@ public class JobQueue {
         job.setProgress(new Progress(Progress.Phase.WAITING, 0, 0).inScene(nextScene(job), count));
         running = null;
         lastActivity = clock.instant();
-        queued.addLast(job);
+        // At the head: it stays the oldest job of its user, so a later job of the same user does not get in between
+        // its scenes; the other users still go first by their turns
+        queued.addFirst(job);
         repository.save(job);
         log.info("Job {}: {} of {} scenes made, back in the queue", job.getId(), job.getScenesDone(), count);
         return true;
