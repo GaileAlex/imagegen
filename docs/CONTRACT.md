@@ -221,6 +221,9 @@ of a scene.
     `[Сцена 2, 10 с]` and Estonian `[Stseen 2 · 10]` too), its prompt follows; text before the first mark belongs to
     the first scene. Each scene lasts 2 to `sceneSeconds`; the sum is the length of the video (`seconds` of the job
     is set to it, at most the max of `seconds`). One mark only = a plain clip with that text. The prompt ideas write this form.
+    Scenes that do not fit the mode (written for another one: LTX scenes of 10 s given to Wan) are not refused: the
+    sum, cut to the max of `seconds`, becomes the length and the job writes the scenes again from the whole text, as
+    below (a plain clip when that length fits one clip).
   - not written out, `seconds` above `clipSeconds`: the length is split into the fewest even scenes (30 s LTX =
     3 x 10, 13 s Wan = 5 + 4 + 4) and the job writes their prompts itself, from `prompt` taken as the idea or the
     story, with the idea model (`STORYBOARD`, on the GPU the job holds: ComfyUI unloads its model for it; the CPU when

@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.LongSupplier;
+import java.util.stream.Collectors;
 
 /**
  * Turns the params of a request into a {@link Job}: checks them against the catalogue, fills in the defaults and
@@ -88,7 +89,9 @@ public class JobFactory {
 
     /**
      * A long video: the scenes written out in the prompt (their seconds become the length), or even scenes whose
-     * prompts the job writes itself when the length is above one clip.
+     * prompts the job writes itself when the length is above one clip. Scenes written for another model (LTX scenes
+     * of 10 s given to Wan, which takes 5 s a scene and 20 s in all) are written again by the job from the same text,
+     * as long as this model allows.
      *
      * @return null for a single clip
      */
@@ -98,26 +101,27 @@ public class JobFactory {
             // one scene is a plain clip
             params.put("prompt", marked.getFirst().prompt());
         }
+        int seconds = params.get("seconds") instanceof Number number ? number.intValue() : 0;
         if (marked.size() > 1) {
-            int total = 0;
-            for (Scene scene : marked) {
-                if (scene.seconds() < MIN_SCENE_SECONDS || scene.seconds() > model.sceneSeconds()) {
-                    throw new InvalidParamsException("A scene lasts " + MIN_SCENE_SECONDS + " to "
-                            + model.sceneSeconds() + " seconds");
-                }
-                total += scene.seconds();
-            }
+            int total = marked.stream().mapToInt(Scene::seconds).sum();
             int longest = maxSeconds(model);
-            if (total > longest) {
-                throw new InvalidParamsException("The scenes last " + total + " s, longer than " + longest + " s");
+            boolean fits = total <= longest && marked.stream().allMatch(scene ->
+                    scene.seconds() >= MIN_SCENE_SECONDS && scene.seconds() <= model.sceneSeconds());
+            if (fits) {
+                params.put("seconds", total);
+                return List.copyOf(marked);
             }
-            params.put("seconds", total);
-            return List.copyOf(marked);
+            seconds = Math.clamp(total, MIN_SCENE_SECONDS, longest);
+            params.put("seconds", seconds);
+            if (seconds <= model.clipSeconds()) {
+                params.put("prompt", marked.stream().map(Scene::prompt).collect(Collectors.joining("\n")));
+                return null;
+            }
         }
-        if (!(params.get("seconds") instanceof Number seconds) || seconds.intValue() <= model.clipSeconds()) {
+        if (seconds <= model.clipSeconds()) {
             return null;
         }
-        return ScenePrompts.split(seconds.intValue(), model.sceneSeconds()).stream()
+        return ScenePrompts.split(seconds, model.sceneSeconds()).stream()
                 .map(length -> new Scene(length, null, null))
                 .toList();
     }

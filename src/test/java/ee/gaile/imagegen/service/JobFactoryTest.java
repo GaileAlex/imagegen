@@ -254,13 +254,32 @@ class JobFactoryTest {
     }
 
     @Test
-    void writtenScenesKeepToTheirLengths() {
-        assertThatThrownBy(() -> create("wan22-i2v", params("prompt", "[Scene 1 · 6 s]\na\n[Scene 2 · 5 s]\nb")))
-                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("2 to 5 seconds");
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", "[Scene 1 · 1 s]\na\n[Scene 2 · 5 s]\nb")))
-                .isInstanceOf(InvalidParamsException.class);
+    void scenesWrittenForAnotherModelAreWrittenAgainByTheJob() {
+        // the 3 x 10 s of LTX given to Wan: 5 s a scene, 20 s in all
+        String ltx = "[Scene 1 · 10 s]\nhe plays\n[Scene 2 · 10 s]\nhe stands\n[Scene 3 · 10 s]\nhe waves";
+        Job wan = create("wan22-i2v", params("prompt", ltx, "seconds", 5));
+
+        assertThat(wan.getScenes()).containsExactly(new Scene(5, null, null), new Scene(5, null, null),
+                new Scene(5, null, null), new Scene(5, null, null));
+        assertThat(wan.getParams()).containsEntry("seconds", 20).containsEntry("prompt", ltx);
+    }
+
+    @Test
+    void scenesTooLongInAllAreWrittenAgainWithinTheLimit() {
         String fourScenes = "[Scene 1 · 10 s]\na\n[Scene 2 · 10 s]\nb\n[Scene 3 · 10 s]\nc\n[Scene 4 · 2 s]\nd";
-        assertThatThrownBy(() -> create("ltx25-i2v", params("prompt", fourScenes)))
-                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("32 s");
+
+        Job job = create("ltx25-i2v", params("prompt", fourScenes));
+
+        assertThat(job.getScenes()).extracting(Scene::seconds).containsExactly(10, 10, 10);
+        assertThat(job.getScenes()).extracting(Scene::prompt).containsOnlyNulls();
+        assertThat(job.getParams()).containsEntry("seconds", 30);
+    }
+
+    @Test
+    void scenesThatDoNotFitAndFitInOneClipMakeAPlainClip() {
+        Job job = create("ltx25-i2v", params("prompt", "[Scene 1 · 1 s]\nhe plays\n[Scene 2 · 5 s]\nhe waves"));
+
+        assertThat(job.getScenes()).isNull();
+        assertThat(job.getParams()).containsEntry("seconds", 6).containsEntry("prompt", "he plays\nhe waves");
     }
 }
