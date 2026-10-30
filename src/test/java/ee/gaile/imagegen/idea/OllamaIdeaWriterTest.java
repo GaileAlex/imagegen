@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class OllamaIdeaWriterTest {
 
     private final OllamaIdeaWriter writer = new OllamaIdeaWriter(
-            new IdeaProperties("", "", "m", Duration.ofMinutes(1), Duration.ofMinutes(5), Duration.ofMinutes(15), 0.9),
+            new IdeaProperties("", "", "m", Duration.ofMinutes(1), Duration.ofMinutes(1), Duration.ofMinutes(5), Duration.ofMinutes(15), 0.9),
             TestCatalogue.MAPPER);
 
     @Test

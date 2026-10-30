@@ -36,7 +36,7 @@ class OllamaIdeaWriter implements IdeaWriter, GpuGuest {
     OllamaIdeaWriter(IdeaProperties properties, ObjectMapper mapper) {
         this.properties = properties;
         this.mapper = mapper;
-        this.gpuClient = client(properties.gpuUrl(), properties.timeout());
+        this.gpuClient = client(properties.gpuUrl(), properties.gpuTimeout());
         this.cpuClient = client(properties.url(), properties.timeout());
     }
 

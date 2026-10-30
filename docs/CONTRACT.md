@@ -279,7 +279,7 @@ for 12 s). The prompts are English, so the translator leaves them.
 (`[Scene 1 · 10 s]` + prompt, a blank line, `[Scene 2 · 10 s]` ...), all from one answer: the model writes the cast
 (the phrases every scene calls the people by), the place, the background sound (LTX), the story, then every scene
 and where everyone is at its end, which is where the next scene starts. ~1 min on the GPU for 30 s; the idea timeout
-is 8 min for the CPU (cv-app waits up to 9 min).
+is 3 min on the GPU and 8 min for the CPU (cv-app waits up to 9 min).
 Errors: 400 `invalid_params` (empty idea without a picture, too long idea, not a VIDEO mode, a mode that needs a
 picture without one, `sourceJobId` not a finished image job of the user), 503 `idea_unavailable` (no model set, no
 answer, no JSON).

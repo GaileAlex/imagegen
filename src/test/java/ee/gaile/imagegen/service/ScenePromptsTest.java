@@ -40,6 +40,8 @@ class ScenePromptsTest {
     void aTextWithoutMarksHasNoScenes() {
         assertThat(ScenePrompts.parse("A man plays the guitar [softly] for 10 s")).isEmpty();
         assertThat(ScenePrompts.parse(null)).isEmpty();
+        // seconds beyond an int are no mark, not an error
+        assertThat(ScenePrompts.parse("[Scene 1 · 99999999999 s]\nHe waves.")).isEmpty();
     }
 
     @Test
