@@ -66,6 +66,9 @@ imagegen:
     model: huihui_ai/gemma-4-abliterated:26b
     # the storyboard of a 30 s video is ~1500 tokens: ~3 min at 9.6 tok/s when the CPU has to write it
     timeout: 8m
+    # ~1 min on the GPU for a 30 s storyboard, an idea in 7-17 s: a stuck GPU instance hands over to the CPU without
+    # holding the queue (it waits while a guest has the GPU) for the 8 min of the CPU
+    gpu-timeout: 3m
     # it takes most of the card: no longer than a second variant needs
     gpu-keep-alive: 3m
     keep-alive: 15m

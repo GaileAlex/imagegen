@@ -18,7 +18,7 @@ public class ScenePrompts {
 
     /** "[Scene 2 · 10 s]" on a line of its own; any separator, "Сцена 2, 10 с" as well */
     private static final Pattern MARK = Pattern.compile(
-            "^[ \\t]*\\[\\s*(?:scene|сцена|stseen)\\s*(\\d+)\\s*[·•.,:;-]?\\s*(\\d+)\\s*"
+            "^[ \\t]*\\[\\s*(?:scene|сцена|stseen)\\s*(\\d+)\\s*[·•.,:;-]?\\s*(\\d{1,4})\\s*"
                     + "(?:s|sec|seconds|с|сек|sek)?\\.?\\s*]\\s*$",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.MULTILINE);
 

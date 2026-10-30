@@ -80,9 +80,10 @@ public class JobQueue {
     public int submit(Job job) {
         lock.lock();
         try {
-            int pending = queued.size() + (running != null ? 1 : 0);
             repository.save(job);
             queued.addLast(job);
+            // by the turns of the users, as the worker takes them
+            int pending = plannedOrder().indexOf(job) + (running != null ? 1 : 0);
             jobQueued.signal();
             log.info("Job {} queued: {} of user {}, {} ahead", job.getId(), job.getModel(), job.getUserId(), pending);
             return pending;
@@ -122,7 +123,7 @@ public class JobQueue {
                 repository.save(job);
                 // a long video between two scenes has some made already
                 if (job.hasScenes()) {
-                    gateway.discardScenes(job);
+                    discardScenes(job);
                 }
                 log.info("Job {} cancelled in the queue", job.getId());
                 return true;
@@ -160,6 +161,8 @@ public class JobQueue {
                     return false;
                 }
                 loaded = false;
+                // the idle unload skips a queue with nothing loaded, so the translation model leaves with the model
+                translator.unload();
                 log.info("Model unloaded for a GPU guest");
             }
             guests++;
@@ -278,7 +281,7 @@ public class JobQueue {
                 job.setProgress(job.hasScenes()
                         ? Progress.LOADING.inScene(nextScene(job), job.getScenes().size())
                         : Progress.LOADING);
-                repository.save(job);
+                saveQuietly(job);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
@@ -321,7 +324,7 @@ public class JobQueue {
                 return;
             }
             if (job.hasScenes() && result == null) {
-                gateway.discardScenes(job);
+                discardScenes(job);
             }
             if (job.isCancelRequested()) {
                 job.setStatus(JobStatus.CANCELLED);
@@ -371,9 +374,30 @@ public class JobQueue {
         // At the head: it stays the oldest job of its user, so a later job of the same user does not get in between
         // its scenes; the other users still go first by their turns
         queued.addFirst(job);
-        repository.save(job);
+        saveQuietly(job);
         log.info("Job {}: {} of {} scenes made, back in the queue", job.getId(), job.getScenesDone(), count);
         return true;
+    }
+
+    /**
+     * For a job that goes on in memory whatever its record says: a record that cannot be written (a full disk) must
+     * not end the single worker thread.
+     */
+    private void saveQuietly(Job job) {
+        try {
+            repository.save(job);
+        } catch (RuntimeException e) {
+            log.error("Job {} could not be saved", job.getId(), e);
+        }
+    }
+
+    /** The scenes are only files: a failed delete must not keep the job from ending */
+    private void discardScenes(Job job) {
+        try {
+            gateway.discardScenes(job);
+        } catch (RuntimeException e) {
+            log.warn("Job {}: its scenes could not be deleted: {}", job.getId(), e.getMessage());
+        }
     }
 
     /** The scene of a long video its next turn makes; the last one again when only the join is left */
@@ -402,6 +426,8 @@ public class JobQueue {
             } finally {
                 guest.leaveGpu();
             }
+            // every step has its own retry
+            job.setStepFailures(0);
             repository.save(job);
             log.info("Job {}: storyboard of {} scenes written", job.getId(), count);
         }
@@ -431,12 +457,14 @@ public class JobQueue {
         if (job.hasScenes()) {
             texts.remove("prompt");
         }
-        if (texts.isEmpty()) {
+        // a long video tried again keeps the translations of its first try
+        if (texts.isEmpty() || !job.getTranslations().isEmpty()) {
             return;
         }
         job.setProgress(Progress.TRANSLATING);
         job.setTranslations(Map.copyOf(translator.translate(texts)));
         job.setProgress(Progress.LOADING);
+        job.setStepFailures(0);
         repository.save(job);
         log.info("Job {}: translated {}", job.getId(), job.getTranslations().keySet());
     }
@@ -458,6 +486,7 @@ public class JobQueue {
         }
         if (changed) {
             job.setScenes(List.copyOf(scenes));
+            job.setStepFailures(0);
             repository.save(job);
             log.info("Job {}: scenes translated", job.getId());
         }

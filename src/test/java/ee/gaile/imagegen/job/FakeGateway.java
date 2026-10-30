@@ -1,5 +1,7 @@
 package ee.gaile.imagegen.job;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,6 +23,8 @@ public class FakeGateway implements ComfyGateway {
     public volatile int interrupts;
     /** The joins that fail before one works */
     public volatile int joinFailures;
+    /** The scenes cannot be deleted (a disk error) */
+    public volatile boolean discardFails;
     private volatile Job current;
 
     private final Map<Job, LinkedBlockingQueue<Object>> outcomes = new ConcurrentHashMap<>();
@@ -48,6 +52,9 @@ public class FakeGateway implements ComfyGateway {
 
     @Override
     public void discardScenes(Job job) {
+        if (discardFails) {
+            throw new UncheckedIOException(new IOException("disk error"));
+        }
         discarded.add(job);
     }
 

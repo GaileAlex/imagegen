@@ -5,12 +5,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -30,6 +33,10 @@ public class JobQueueTest {
     private final List<Integer> guestLeaves = new CopyOnWriteArrayList<>();
     private final List<Job> storyboarded = new CopyOnWriteArrayList<>();
     private volatile String sourceProblem;
+    /** The next saves of a record that fail (a full disk) */
+    private final AtomicInteger failingSaves = new AtomicInteger();
+    /** The next storyboards that fail */
+    private final AtomicInteger failingStoryboards = new AtomicInteger();
     private JobQueue queue;
 
     @BeforeEach
@@ -41,10 +48,18 @@ public class JobQueueTest {
             prepared.add(job);
         };
         Storyboards storyboards = job -> {
+            if (failingStoryboards.getAndUpdate(n -> Math.max(n - 1, 0)) > 0) {
+                throw new JobFailedException("no storyboard");
+            }
             storyboarded.add(job);
             return job.getScenes().stream().map(scene -> scene.withPrompt("written " + scene.seconds())).toList();
         };
-        queue = new JobQueue(gateway, translator, sources, job -> saved.add(job.getStatus()), PROPERTIES, clock,
+        queue = new JobQueue(gateway, translator, sources, job -> {
+            if (failingSaves.getAndUpdate(n -> Math.max(n - 1, 0)) > 0) {
+                throw new UncheckedIOException(new IOException("no space left on device"));
+            }
+            saved.add(job.getStatus());
+        }, PROPERTIES, clock,
                 () -> guestLeaves.add(gateway.started.size()), storyboards);
         queue.start();
     }
@@ -78,6 +93,8 @@ public class JobQueueTest {
         // the model of the last job left the GPU for the guest
         assertThat(gateway.frees).isEqualTo(1);
         assertThat(queue.state().loaded()).isFalse();
+        // the idle unload no longer runs with nothing loaded: the translation model leaves now
+        assertThat(translator.unloads).isEqualTo(1);
         queue.returnGpu();
     }
 
@@ -167,7 +184,8 @@ public class JobQueueTest {
         }
         Job other = job(2, "b");
 
-        assertThat(queue.submit(other)).isEqualTo(100);
+        // by the turns, as position() says
+        assertThat(queue.submit(other)).isEqualTo(1);
         assertThat(queue.position(other)).isEqualTo(1);
         assertThat(queue.state().pending()).isEqualTo(101);
     }
@@ -387,6 +405,62 @@ public class JobQueueTest {
         await().until(() -> film.getStatus() == JobStatus.FAILED);
         assertThat(film.getError()).isEqualTo("out of memory");
         assertThat(gateway.discarded).containsExactly(film);
+    }
+
+    @Test
+    void aSceneFailedAfterAFailedStoryboardIsTriedOnceMoreToo() throws InterruptedException {
+        failingStoryboards.set(1);
+        Job film = longVideo(1, "film", new Scene(10, null, null), new Scene(10, null, null));
+        queue.submit(film);
+
+        gateway.awaitRunning();
+        assertThat(storyboarded).containsExactly(film);
+        gateway.fail(film, "out of memory");
+        gateway.awaitRunning();
+        gateway.complete(film);
+        gateway.awaitRunning();
+        gateway.complete(film);
+
+        await().until(() -> film.getStatus() == JobStatus.DONE);
+        assertThat(gateway.started).containsExactly("film#scene1", "film#scene1", "film#scene2", "film#join");
+    }
+
+    @Test
+    void aRecordThatCannotBeSavedBetweenTwoScenesDoesNotStopTheQueue() throws InterruptedException {
+        Job film = longVideo(1, "film", new Scene(10, "plays", null), new Scene(10, "stands up", null));
+        queue.submit(film);
+        gateway.awaitRunning();
+
+        failingSaves.set(1);
+        gateway.complete(film);
+        assertThat(gateway.awaitRunning()).isSameAs(film);
+        gateway.complete(film);
+
+        await().until(() -> film.getStatus() == JobStatus.DONE);
+        assertThat(gateway.started).containsExactly("film#scene1", "film#scene2", "film#join");
+    }
+
+    @Test
+    void scenesThatCannotBeDeletedDoNotStopTheQueue() throws InterruptedException {
+        gateway.discardFails = true;
+        Job film = longVideo(1, "film", new Scene(10, "plays", null), new Scene(10, "stands up", null));
+        Job next = job(2, "next");
+        queue.submit(film);
+        gateway.awaitRunning();
+        queue.submit(next);
+        gateway.fail(film, "out of memory");
+        assertThat(gateway.awaitRunning()).isSameAs(next);
+        gateway.complete(next);
+        assertThat(gateway.awaitRunning()).isSameAs(film);
+        gateway.fail(film, "out of memory");
+
+        await().until(() -> film.getStatus() == JobStatus.FAILED);
+        assertThat(film.getFinishedAt()).isNotNull();
+        // the worker goes on
+        Job last = job(2, "last");
+        queue.submit(last);
+        assertThat(gateway.awaitRunning()).isSameAs(last);
+        assertThat(gateway.started).containsExactly("film#scene1", "next", "film#scene1", "last");
     }
 
     @Test
