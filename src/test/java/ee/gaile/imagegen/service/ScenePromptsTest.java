@@ -1,6 +1,7 @@
 package ee.gaile.imagegen.service;
 
 import ee.gaile.imagegen.job.Scene;
+import ee.gaile.imagegen.model.config.VideoPromptStyle;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,10 +15,25 @@ class ScenePromptsTest {
     void theWrittenScenesAreReadBack() {
         List<Scene> scenes = List.of(new Scene(10, "He plays.\nHe smiles.", null), new Scene(8, "He stands up.", null));
 
-        String text = ScenePrompts.format(scenes);
+        String text = ScenePrompts.format(scenes, VideoPromptStyle.LTX);
 
-        assertThat(text).isEqualTo("[Scene 1 · 10 s]\nHe plays.\nHe smiles.\n\n[Scene 2 · 8 s]\nHe stands up.");
+        assertThat(text).isEqualTo("[Scene 1 · 10 s · LTX]\nHe plays.\nHe smiles.\n\n[Scene 2 · 8 s · LTX]\n"
+                + "He stands up.");
         assertThat(ScenePrompts.parse(text)).isEqualTo(scenes);
+        assertThat(ScenePrompts.style(text)).isEqualTo(VideoPromptStyle.LTX);
+        assertThat(ScenePrompts.style(ScenePrompts.format(scenes, VideoPromptStyle.WAN)))
+                .isEqualTo(VideoPromptStyle.WAN);
+    }
+
+    @Test
+    void theStyleIsTakenFromTheFirstMarkNamingOne() {
+        assertThat(ScenePrompts.style("[Scene 1 · 5 s]\na\n[сцена 2, 5 с, wan]\nb\n[Scene 3 · 5 s · LTX]\nc"))
+                .isEqualTo(VideoPromptStyle.WAN);
+        assertThat(ScenePrompts.parse("[Scene 1 · 5 s]\na\n[сцена 2, 5 с, wan]\nb")).extracting(Scene::seconds)
+                .containsExactly(5, 5);
+        assertThat(ScenePrompts.style("[Scene 1 · 5 s]\na\n[Scene 2 · 5 s]\nb")).isNull();
+        assertThat(ScenePrompts.style("He plays [Wan]")).isNull();
+        assertThat(ScenePrompts.style(null)).isNull();
     }
 
     @Test

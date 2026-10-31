@@ -265,6 +265,23 @@ class JobFactoryTest {
     }
 
     @Test
+    void scenesWrittenInTheStyleOfAnotherModelAreWrittenAgainThoughTheyFit() {
+        // the 4 x 5 s of Wan fit LTX by their length, but are short and soundless: LTX writes 2 x 10 s again
+        String wan = "[Scene 1 · 5 s · Wan]\na\n[Scene 2 · 5 s · Wan]\nb\n[Scene 3 · 5 s · Wan]\nc\n[Scene 4 · 5 s · Wan]\nd";
+        Job ltx = create("ltx25-nsfw-i2v", params("prompt", wan));
+
+        assertThat(ltx.getScenes()).containsExactly(new Scene(10, null, null), new Scene(10, null, null));
+        assertThat(ltx.getParams()).containsEntry("seconds", 20).containsEntry("prompt", wan);
+    }
+
+    @Test
+    void scenesOfTheSameStyleAreKept() {
+        Job job = create("wan22-i2v-fastmove", params("prompt", "[Scene 1 · 5 s · Wan]\na\n[Scene 2 · 4 s · Wan]\nb"));
+
+        assertThat(job.getScenes()).containsExactly(new Scene(5, "a", null), new Scene(4, "b", null));
+    }
+
+    @Test
     void scenesTooLongInAllAreWrittenAgainWithinTheLimit() {
         String fourScenes = "[Scene 1 · 10 s]\na\n[Scene 2 · 10 s]\nb\n[Scene 3 · 10 s]\nc\n[Scene 4 · 2 s]\nd";
 

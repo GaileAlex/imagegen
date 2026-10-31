@@ -5,6 +5,7 @@ import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.model.ModelDefinition;
 import ee.gaile.imagegen.model.ParamDefinition;
+import ee.gaile.imagegen.model.config.VideoPromptStyle;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -90,8 +91,9 @@ public class JobFactory {
     /**
      * A long video: the scenes written out in the prompt (their seconds become the length), or even scenes whose
      * prompts the job writes itself when the length is above one clip. Scenes written for another model (LTX scenes
-     * of 10 s given to Wan, which takes 5 s a scene and 20 s in all) are written again by the job from the same text,
-     * as long as this model allows.
+     * of 10 s given to Wan, which takes 5 s a scene and 20 s in all; or the short soundless scenes of Wan given to
+     * LTX, their marks naming the style) are written again by the job from the same text, as long as this model
+     * allows.
      *
      * @return null for a single clip
      */
@@ -105,7 +107,9 @@ public class JobFactory {
         if (marked.size() > 1) {
             int total = marked.stream().mapToInt(Scene::seconds).sum();
             int longest = maxSeconds(model);
-            boolean fits = total <= longest && marked.stream().allMatch(scene ->
+            VideoPromptStyle style = ScenePrompts.style((String) params.get("prompt"));
+            boolean fits = (style == null || style == model.promptStyle()) && total <= longest
+                    && marked.stream().allMatch(scene ->
                     scene.seconds() >= MIN_SCENE_SECONDS && scene.seconds() <= model.sceneSeconds());
             if (fits) {
                 params.put("seconds", total);

@@ -111,7 +111,7 @@ public class PromptIdeaService {
             log.debug("The storyboard: {} | {}", answer.get(IdeaPrompts.CAST), answer.get(IdeaPrompts.STORY));
             boolean empty = start == Start.PICTURE_ONLY && IdeaPrompts.nobodyIn(answer.get(IdeaPrompts.LIVING));
             List<Scene> scenes = IdeaPrompts.scenes(answer, lengths, empty);
-            return new PromptIdea(answer.get(IdeaPrompts.FRAME_PROMPT), ScenePrompts.format(scenes));
+            return new PromptIdea(answer.get(IdeaPrompts.FRAME_PROMPT), ScenePrompts.format(scenes, model.promptStyle()));
         }
         String videoPrompt = answer.get(IdeaPrompts.VIDEO_PROMPT);
         if (start == Start.PICTURE_ONLY) {
