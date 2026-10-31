@@ -92,8 +92,9 @@ public class JobFactory {
      * A long video: the scenes written out in the prompt (their seconds become the length), or even scenes whose
      * prompts the job writes itself when the length is above one clip. Scenes written for another model (LTX scenes
      * of 10 s given to Wan, which takes 5 s a scene and 20 s in all; or the short soundless scenes of Wan given to
-     * LTX, their marks naming the style) are written again by the job from the same text, as long as this model
-     * allows.
+     * LTX, their marks naming the style) are written again by the job from the same text: as long as the length set
+     * in the form when that is longer than the scenes (the 20 s of Wan on LTX set to 30 s make 3 x 10 s), never
+     * longer than this model allows.
      *
      * @return null for a single clip
      */
@@ -115,7 +116,7 @@ public class JobFactory {
                 params.put("seconds", total);
                 return List.copyOf(marked);
             }
-            seconds = Math.clamp(total, MIN_SCENE_SECONDS, longest);
+            seconds = Math.clamp(Math.max(total, seconds), MIN_SCENE_SECONDS, longest);
             params.put("seconds", seconds);
             if (seconds <= model.clipSeconds()) {
                 params.put("prompt", marked.stream().map(Scene::prompt).collect(Collectors.joining("\n")));

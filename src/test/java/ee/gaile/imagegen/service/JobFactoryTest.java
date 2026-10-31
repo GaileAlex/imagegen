@@ -275,6 +275,19 @@ class JobFactoryTest {
     }
 
     @Test
+    void scenesWrittenAgainTakeTheLongerLengthOfTheForm() {
+        String wan = "[Scene 1 · 5 s · Wan]\na\n[Scene 2 · 5 s · Wan]\nb\n[Scene 3 · 5 s · Wan]\nc\n[Scene 4 · 5 s · Wan]\nd";
+
+        Job ltx = create("ltx25-nsfw-i2v", params("prompt", wan, "seconds", 30));
+
+        assertThat(ltx.getScenes()).extracting(Scene::seconds).containsExactly(10, 10, 10);
+        assertThat(ltx.getParams()).containsEntry("seconds", 30);
+        // a shorter length in the form does not cut the scenes short
+        assertThat(create("ltx25-nsfw-i2v", params("prompt", wan, "seconds", 8)).getParams())
+                .containsEntry("seconds", 20);
+    }
+
+    @Test
     void scenesOfTheSameStyleAreKept() {
         Job job = create("wan22-i2v-fastmove", params("prompt", "[Scene 1 · 5 s · Wan]\na\n[Scene 2 · 4 s · Wan]\nb"));
 
