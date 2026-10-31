@@ -213,8 +213,8 @@ class PromptIdeaServiceTest {
                 .contains("3 scenes (scene 1: 10 s, scene 2: 10 s, scene 3: 10 s)")
                 .contains("never with their backs to the camera");
         assertThat(idea.framePrompt()).isEqualTo("frame text");
-        assertThat(idea.videoPrompt()).isEqualTo("[Scene 1 · 10 s]\nscene1 text\n\n[Scene 2 · 10 s]\nscene2 text"
-                + "\n\n[Scene 3 · 10 s]\nscene3 text");
+        assertThat(idea.videoPrompt()).isEqualTo("[Scene 1 · 10 s · LTX]\nscene1 text\n\n[Scene 2 · 10 s · LTX]\n"
+                + "scene2 text\n\n[Scene 3 · 10 s · LTX]\nscene3 text");
     }
 
     @Test
@@ -223,7 +223,7 @@ class PromptIdeaServiceTest {
 
         assertThat(writer.schemaFields).doesNotContain("sound").contains("scene3").doesNotContain("scene3End");
         assertThat(writer.system).contains("without sound").contains("scene 1: 5 s, scene 2: 4 s, scene 3: 4 s");
-        assertThat(idea.videoPrompt()).startsWith("[Scene 1 · 5 s]\n");
+        assertThat(idea.videoPrompt()).startsWith("[Scene 1 · 5 s · Wan]\n");
     }
 
     private static String request(String model, Integer seconds, boolean frame, String orientation, UUID source) {

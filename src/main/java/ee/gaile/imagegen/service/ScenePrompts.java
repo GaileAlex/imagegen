@@ -1,26 +1,46 @@
 package ee.gaile.imagegen.service;
 
 import ee.gaile.imagegen.job.Scene;
+import ee.gaile.imagegen.model.config.VideoPromptStyle;
 import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * The prompt of a long video with its scenes written out: every scene starts with a mark line "[Scene 2 · 10 s]"
- * and its prompt follows. The prompt ideas write it so; the user may change the texts and the seconds.
+ * The prompt of a long video with its scenes written out: every scene starts with a mark line "[Scene 2 · 10 s · LTX]"
+ * and its prompt follows. The prompt ideas write it so, the last part naming the kind of prompt the scenes were
+ * written in; the user may change the texts and the seconds.
  */
 @UtilityClass
 public class ScenePrompts {
 
-    /** "[Scene 2 · 10 s]" on a line of its own; any separator, "Сцена 2, 10 с" as well */
+    /** "[Scene 2 · 10 s · LTX]" on a line of its own; any separator, "Сцена 2, 10 с" as well, the style optional */
     private static final Pattern MARK = Pattern.compile(
             "^[ \\t]*\\[\\s*(?:scene|сцена|stseen)\\s*(\\d+)\\s*[·•.,:;-]?\\s*(\\d{1,4})\\s*"
-                    + "(?:s|sec|seconds|с|сек|sek)?\\.?\\s*]\\s*$",
+                    + "(?:s|sec|seconds|с|сек|sek)?\\.?\\s*(?:[·•,:;-]\\s*(wan|ltx)\\s*)?]\\s*$",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.MULTILINE);
+
+    /**
+     * @return the kind of prompt the scenes of a text were written in: the style named by its first mark that names
+     * one; null when no mark does (written by hand, or before the marks named it)
+     */
+    public static VideoPromptStyle style(String text) {
+        if (text == null) {
+            return null;
+        }
+        Matcher mark = MARK.matcher(text);
+        while (mark.find()) {
+            if (mark.group(3) != null) {
+                return VideoPromptStyle.valueOf(mark.group(3).toUpperCase(Locale.ROOT));
+            }
+        }
+        return null;
+    }
 
     /**
      * @return the scenes of a text with marks, in the order written (the numbers in the marks are not checked); text
@@ -51,11 +71,13 @@ public class ScenePrompts {
         return scenes;
     }
 
-    /** The text {@link #parse} reads back */
-    public static String format(List<Scene> scenes) {
+    /** The text {@link #parse} and {@link #style} read back */
+    public static String format(List<Scene> scenes, VideoPromptStyle style) {
+        String named = style == VideoPromptStyle.WAN ? "Wan" : "LTX";
         List<String> parts = new ArrayList<>();
         for (int i = 0; i < scenes.size(); i++) {
-            parts.add("[Scene " + (i + 1) + " · " + scenes.get(i).seconds() + " s]\n" + scenes.get(i).prompt());
+            parts.add("[Scene " + (i + 1) + " · " + scenes.get(i).seconds() + " s · " + named + "]\n"
+                    + scenes.get(i).prompt());
         }
         return parts.stream().collect(Collectors.joining("\n\n"));
     }
