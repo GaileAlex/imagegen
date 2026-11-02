@@ -8,6 +8,7 @@ import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.JobResult;
 import ee.gaile.imagegen.job.Progress;
+import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.service.JobFactory;
 import ee.gaile.imagegen.service.WorkflowValues;
 import ee.gaile.imagegen.model.workflow.ParamSpec;
@@ -44,7 +45,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Runs a job on ComfyUI: fills the workflow template with the params of the job, uploads its input images, queues the
@@ -161,7 +164,8 @@ public class ComfyUiGateway implements ComfyGateway {
     /**
      * The workflow of the template with the values put into every input the params file lists for them.
      * Values without an entry in the file are ignored; inputs without a value keep what the template has.
-     * A video with keepFace is rewired by {@link FaceAnchors} when its workflow can anchor the face.
+     * A video with keepFace is rewired by {@link FaceAnchors} when its workflow can anchor the face; a video with
+     * sound gets it from {@link SoundGraphs}.
      */
     ObjectNode buildWorkflow(WorkflowTemplate template, Map<String, Object> values) {
         ObjectNode graph = template.newGraph();
@@ -183,6 +187,13 @@ public class ComfyUiGateway implements ComfyGateway {
         if (template.faceAnchor() != null && Boolean.TRUE.equals(values.get(WorkflowValues.KEEP_FACE))
                 && !Boolean.TRUE.equals(values.get(JobFactory.TEXT_ONLY))) {
             FaceAnchors.apply(graph, template.faceAnchor(), ((Number) values.get("frames")).intValue());
+        }
+        if (Boolean.TRUE.equals(values.get(WorkflowValues.SOUND))) {
+            if (template.decodedNode() == null) {
+                throw new IllegalStateException("Workflow " + template.id() + " cannot get a sound");
+            }
+            SoundGraphs.addToClip(graph, template.decodedNode(), template.outputNode(),
+                    SoundGraphs.prompt((String) values.get("prompt")), ((Number) values.get("seed")).longValue());
         }
         return graph;
     }
@@ -231,7 +242,10 @@ public class ComfyUiGateway implements ComfyGateway {
         }
     }
 
-    /** All the scenes of a long video joined into the result of the job; the scene files go afterwards */
+    /**
+     * All the scenes of a long video joined into the result of the job, with one sound for all of them when the job
+     * asks for it (the scenes are made without); the scene files go afterwards
+     */
     private JobResult join(Job job, Consumer<Progress> progress, Deadline deadline) throws IOException {
         int count = job.getScenes().size();
         List<String> names = new ArrayList<>(count);
@@ -242,6 +256,11 @@ public class ComfyUiGateway implements ComfyGateway {
             }
             double repeated = (double) WorkflowValues.tailFrames(job) / WorkflowValues.fps(job);
             ObjectNode graph = SceneGraphs.join(names, repeated, job.getId().toString());
+            if (Boolean.TRUE.equals(job.getParams().get(WorkflowValues.SOUND))) {
+                String story = job.getScenes().stream().map(Scene::modelPrompt).filter(Objects::nonNull)
+                        .collect(Collectors.joining(" "));
+                SoundGraphs.addToJoin(graph, SoundGraphs.prompt(story), job.getSeed());
+            }
             Ran ran = execute(job, graph, SceneGraphs.JOIN_SAVE, progress, deadline);
             String contentType = "video/mp4";
             Path target = files.result(job.getId(), contentType);

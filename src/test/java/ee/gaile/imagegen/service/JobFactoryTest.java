@@ -132,6 +132,15 @@ class JobFactoryTest {
     }
 
     @Test
+    void wanGetsASoundUnlessTheClientTurnsItOffAndLtxHasItsOwn() {
+        assertThat(create("wan22-i2v-fastmove", params("prompt", "x")).getParams()).containsEntry("sound", true);
+        assertThat(create("wan22-i2v-fastmove", params("prompt", "x", "sound", false)).getParams())
+                .containsEntry("sound", false);
+        assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", "sound", true)))
+                .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Unknown param");
+    }
+
+    @Test
     void wanStillNeedsAnImage() {
         assertThatThrownBy(() -> factory.create(UUID.randomUUID(), 7, "alex",
                 TestCatalogue.model("wan22-i2v-fastmove"), params("prompt", "x"), null, false))

@@ -61,6 +61,11 @@ public class ModelCatalogue {
         if ((kind == JobKind.VIDEO) != (config.promptStyle() != null)) {
             throw new IllegalStateException(config.id() + ": a prompt style is required for VIDEO and only for it");
         }
+        boolean sound = params.stream().anyMatch(param -> param.name().equals(WorkflowValues.SOUND));
+        if (sound && (kind != JobKind.VIDEO || template.decodedNode() == null)) {
+            throw new IllegalStateException(config.id() + ": only a VIDEO mode with \"decoded\" in its params file "
+                    + "can get a sound");
+        }
         if (kind == JobKind.VIDEO) {
             checkLengths(config, template, params);
         } else if (config.clipSeconds() != null || config.sceneSeconds() != null) {
