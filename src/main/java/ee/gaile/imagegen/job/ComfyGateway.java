@@ -1,5 +1,6 @@
 package ee.gaile.imagegen.job;
 
+import java.time.Duration;
 import java.util.function.Consumer;
 
 /**
@@ -45,6 +46,15 @@ public interface ComfyGateway {
 
     /** Unloads every model from VRAM and frees cached memory (POST /free). */
     void free();
+
+    /**
+     * Holds the GPU for the speech services of the chat: the running prompt waits before its next layer until the
+     * hold ends (a later hold extends it); with a room it also gives back VRAM until that much is free.
+     *
+     * @param roomMb 0 = no room asked
+     * @return the VRAM free on the card in MB after the call, -1 when ComfyUI did not tell
+     */
+    long hold(Duration duration, long roomMb);
 
     /** ComfyUI answers /system_stats */
     boolean isUp();

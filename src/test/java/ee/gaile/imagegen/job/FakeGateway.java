@@ -21,6 +21,10 @@ public class FakeGateway implements ComfyGateway {
     public final List<Job> discarded = new CopyOnWriteArrayList<>();
     public volatile int frees;
     public volatile int interrupts;
+    /** The holds asked: seconds and room */
+    public final List<String> holds = new CopyOnWriteArrayList<>();
+    /** What {@link #hold} answers as the free VRAM */
+    public volatile long freeMb = 10_000;
     /** The joins that fail before one works */
     public volatile int joinFailures;
     /** The scenes cannot be deleted (a disk error) */
@@ -103,6 +107,12 @@ public class FakeGateway implements ComfyGateway {
     @Override
     public void free() {
         frees++;
+    }
+
+    @Override
+    public long hold(java.time.Duration duration, long roomMb) {
+        holds.add(duration.toSeconds() + "s/" + roomMb);
+        return freeMb;
     }
 
     @Override

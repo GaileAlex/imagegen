@@ -57,6 +57,10 @@ RUN git clone https://github.com/kijai/ComfyUI-MMAudio /app/custom_nodes/ComfyUI
         open-clip-torch==3.3.0 accelerate==1.15.0 ftfy==6.3.1 && \
     ln -s /models/mmaudio /app/models/mmaudio
 
+# The speech of the chat before the pictures: a prompt waits before its next layer while cv-imagegen-app holds the GPU
+# (POST /gpu_yield/hold) and gives VRAM back for Whisper; it also keeps the GPU work queued ahead short (see the node)
+COPY gpu_yield /app/custom_nodes/gpu_yield
+
 # Triton compiles its launchers at run time (the int8 kernels of comfy-kitchen: Muse, the LTX encoder)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc python3-dev && \
     rm -rf /var/lib/apt/lists/*

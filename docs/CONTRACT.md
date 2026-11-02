@@ -337,6 +337,35 @@ Route leave (`ngOnDestroy`) and `pagehide` (`navigator.sendBeacon`, so cv-app ta
 }
 ```
 
+## GPU hold for the speech
+
+The speech services of the chat (Whisper, Kokoro, the Estonian TTS, the local chat model of Ollama) share the GPU and
+run 2-7 times slower next to a video. While the GPU is held, the running prompt waits before its next layer (within
+0.5 s: our ComfyUI node `gpu_yield` also keeps the GPU work queued by ComfyUI under 0.2 s) and goes on from the same
+place when the hold ends; nothing is cancelled or unloaded, and the queue keeps taking jobs (a new one waits in
+ComfyUI too). The held time does not count to the job timeout nor to the stall timeout. The queue ETA of the page
+does not know about the holds.
+
+### `POST /api/gpu/hold`
+
+Called by cv-app on every recognition, synthesis and local chat answer (30 s, renewed while the speech goes on) and by
+Whisper before it loads a model (with a room). No user header.
+
+```json
+{"seconds": 30, "roomMb": 4096}
+```
+
+`seconds` from now, at most 120 (a hold only grows: the later end wins); `roomMb` = VRAM to make free, 0 = none. The
+waiting prompt gives VRAM back (DynamicVRAM pages of its models, the cached memory of torch) and keeps that room free
+while the hold lasts; with no job running, the idle model of the last job is unloaded instead. `200`:
+
+```json
+{"seconds": 30.0, "freeMb": 7571}
+```
+
+`freeMb` = VRAM free on the card when ComfyUI took the hold (NVML: all processes), -1 when ComfyUI did not answer
+(the hold is then only counted for the deadlines).
+
 ## ComfyUI folders
 
 ComfyUI keeps every uploaded photo and every result in its input/ and output/ folders and has no API to delete them.

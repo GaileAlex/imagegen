@@ -1,6 +1,7 @@
 package ee.gaile.imagegen.web;
 
 import ee.gaile.imagegen.gpu.GpuState;
+import ee.gaile.imagegen.gpu.SpeechHold;
 import ee.gaile.imagegen.gpu.UnloadPolicy;
 import ee.gaile.imagegen.job.ComfyGateway;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -30,6 +32,27 @@ class GpuControllerTest {
     private UnloadPolicy policy;
     @MockitoBean
     private ComfyGateway gateway;
+    @MockitoBean
+    private SpeechHold speechHold;
+
+    @Test
+    void holdPassesTheSecondsAndTheRoom() throws Exception {
+        given(speechHold.hold(Duration.ofMillis(30_500), 4096)).willReturn(new SpeechHold.Held(30.5, 7571));
+
+        mockMvc.perform(post("/api/gpu/hold").contentType("application/json")
+                        .content("{\"seconds\": 30.5, \"roomMb\": 4096}"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"seconds\": 30.5, \"freeMb\": 7571}"));
+    }
+
+    @Test
+    void holdWithoutARoom() throws Exception {
+        given(speechHold.hold(Duration.ofSeconds(30), 0)).willReturn(new SpeechHold.Held(30, -1));
+
+        mockMvc.perform(post("/api/gpu/hold").contentType("application/json").content("{\"seconds\": 30}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.freeMb").value(-1));
+    }
 
     @Test
     void heartbeatIsNoContent() throws Exception {

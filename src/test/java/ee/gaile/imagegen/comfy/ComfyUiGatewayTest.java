@@ -1,6 +1,7 @@
 package ee.gaile.imagegen.comfy;
 
 import ee.gaile.imagegen.job.Deadline;
+import ee.gaile.imagegen.job.GpuHolds;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobFailedException;
 import ee.gaile.imagegen.job.JobResult;
@@ -451,6 +452,46 @@ class ComfyUiGatewayTest {
         assertThat(progress).containsExactly(new ee.gaile.imagegen.job.Progress(
                 ee.gaile.imagegen.job.Progress.Phase.SAMPLING, 2, 8));
         assertThat(events.listeners).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void aHeldRunIsNotTakenForAHungOne() {
+        events.connected = true;
+        Job job = job("muse-txt2img", params("prompt", "x"), null);
+        server.expect(requestTo(BASE + "/prompt")).andRespond(withSuccess("{\"prompt_id\":\"p1\"}",
+                MediaType.APPLICATION_JSON));
+        GpuHolds holds = new GpuHolds(Clock.systemUTC());
+        holds.extend(Duration.ofSeconds(30));
+        Instant now = Instant.now();
+        // silent far longer than the stall time, but the GPU is held: the prompt waits for the speech
+        Deadline deadline = new Deadline(now.plusSeconds(30), Duration.ofMillis(50), now, holds);
+        events.onSubscribe = listener -> Thread.ofVirtual().start(() -> {
+            try {
+                Thread.sleep(300);
+                listener.accept(new ComfyEvent("execution_error", MAPPER.readTree(
+                        "{\"prompt_id\":\"p1\",\"exception_message\":\"boom\"}")));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        assertThatThrownBy(() -> gateway.run(job, sink, deadline)).hasMessage("boom");
+        server.verify();
+    }
+
+    @Test
+    void holdAsksOurNodeAndTellsTheFreeVram() {
+        server.expect(requestTo(BASE + "/gpu_yield/hold")).andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.seconds").value(30.0))
+                .andExpect(jsonPath("$.room_mb").value(4096))
+                .andRespond(withSuccess("{\"heldSeconds\": 30.0, \"waiting\": false, \"freeMb\": 7571}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/gpu_yield/hold"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        assertThat(gateway.hold(Duration.ofSeconds(30), 4096)).isEqualTo(7571);
+        assertThat(gateway.hold(Duration.ofSeconds(30), 0)).isEqualTo(-1);
         server.verify();
     }
 
