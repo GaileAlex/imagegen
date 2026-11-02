@@ -55,11 +55,13 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ComfyUnavailableException.class)
     public ResponseEntity<ErrorBody> comfyDown(ComfyUnavailableException e) {
+        log.warn("Refused with 503 comfyui_unavailable: {}", e.getMessage());
         return body(HttpStatus.SERVICE_UNAVAILABLE, "comfyui_unavailable", e.getMessage());
     }
 
     @ExceptionHandler(IdeaUnavailableException.class)
     public ResponseEntity<ErrorBody> ideaUnavailable(IdeaUnavailableException e) {
+        log.warn("Refused with 503 idea_unavailable: {}", e.getMessage());
         return body(HttpStatus.SERVICE_UNAVAILABLE, "idea_unavailable", e.getMessage());
     }
 
