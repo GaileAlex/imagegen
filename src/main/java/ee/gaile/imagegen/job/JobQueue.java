@@ -43,6 +43,7 @@ public class JobQueue {
     private final Clock clock;
     private final GpuGuest guest;
     private final Storyboards storyboards;
+    private final GpuHolds holds;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition jobQueued = lock.newCondition();
@@ -296,7 +297,8 @@ public class JobQueue {
     }
 
     private void execute(Job job) {
-        Deadline deadline = new Deadline(clock.instant().plus(properties.jobTimeout()), properties.stallTimeout());
+        Instant now = clock.instant();
+        Deadline deadline = new Deadline(now.plus(properties.jobTimeout()), properties.stallTimeout(), now, holds);
         JobResult result = null;
         String error = null;
         try {

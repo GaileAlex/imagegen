@@ -60,7 +60,7 @@ public class JobQueueTest {
             }
             saved.add(job.getStatus());
         }, PROPERTIES, clock,
-                () -> guestLeaves.add(gateway.started.size()), storyboards);
+                () -> guestLeaves.add(gateway.started.size()), storyboards, new GpuHolds(clock));
         queue.start();
     }
 

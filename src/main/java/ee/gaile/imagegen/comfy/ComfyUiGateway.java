@@ -150,6 +150,18 @@ public class ComfyUiGateway implements ComfyGateway {
                 .retrieve().toBodilessEntity();
     }
 
+    /**
+     * POST /gpu_yield/hold of our node (comfyui-service/gpu_yield): the prompt waits before its next layer, and gives
+     * VRAM back for the room. Short timeouts: the speech must not wait for a busy ComfyUI.
+     */
+    @Override
+    public long hold(Duration duration, long roomMb) {
+        JsonNode state = probeClient.post().uri("/gpu_yield/hold").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("seconds", duration.toMillis() / 1000.0, "room_mb", roomMb))
+                .retrieve().body(JsonNode.class);
+        return state != null ? state.path("freeMb").asLong(-1) : -1;
+    }
+
     @Override
     public boolean isUp() {
         try {
@@ -369,18 +381,20 @@ public class ComfyUiGateway implements ComfyGateway {
                     return outcome;
                 }
                 Instant now = clock.instant();
-                if (!now.isBefore(deadline.at())) {
+                if (deadline.passed(now)) {
                     interruptQuietly();
                     throw new JobFailedException("timeout");
                 }
-                Duration silent = Duration.between(watcher.lastEvent(), Instant.now());
+                Instant wallNow = Instant.now();
+                // a prompt that waits for the speech of the chat is silent, not hung
+                Duration stalled = deadline.silence(watcher.lastEvent(), wallNow);
                 // Without the socket no event can come: the silence says nothing then
-                if (events.isConnected() && silent.compareTo(deadline.stall()) > 0) {
+                if (events.isConnected() && stalled.compareTo(deadline.stall()) > 0) {
                     interruptQuietly();
-                    throw new JobFailedException("timeout: ComfyUI reported nothing for " + silent.toMinutes()
+                    throw new JobFailedException("timeout: ComfyUI reported nothing for " + stalled.toMinutes()
                             + " min");
                 }
-                boolean quiet = silent.compareTo(SILENCE) > 0;
+                boolean quiet = Duration.between(watcher.lastEvent(), wallNow).compareTo(SILENCE) > 0;
                 if (!events.isConnected() || quiet) {
                     try {
                         PromptWatcher.Outcome fromHistory = outcomeFromHistory(promptId);
@@ -446,7 +460,7 @@ public class ComfyUiGateway implements ComfyGateway {
                 if (entry != null && entry.path("outputs").has(outputNode)) {
                     return entry;
                 }
-                if (!clock.instant().isBefore(deadline.at())) {
+                if (deadline.passed(clock.instant())) {
                     throw new JobFailedException("ComfyUI returned no output");
                 }
                 Thread.sleep(pollInterval.toMillis());
