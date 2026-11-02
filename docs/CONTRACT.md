@@ -91,6 +91,15 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
   The person comes back to the pose of the picture there and the motion gets calmer, so it is a bad fit for a scene
   where someone leaves the frame. Ignored for a video from the text alone. LTX 12 s with it once spilled out of the
   16 GB of VRAM (6-10 min at ~50 W instead of ~1.5 min): one of the reasons it is off by default.
+- VIDEO `sound` (BOOL, Wan only, default true; LTX makes its own sound): MMAudio large 44k v2 (custom nodes
+  ComfyUI-MMAudio, patched by `comfyui-service/patch_mmaudio.py`) makes the sound from the frames and the prompt
+  (scene marks removed, cut to ~300 characters for its CLIP text encoder; negative "music, speech, talking, singing,
+  moaning"): noises and ambience, no speech. A clip gets it in its own graph (+~25 s), a long video once in its join
+  (one sound for the whole video, no break at the seams; the scenes are made without). Patches: the frames are picked
+  by the real frame rate (the node assumed 8/25 fps), a sound shorter than 8 s is made 8 s long and cut (below 6 s
+  the sampler crawled at 3-15 s a step and the whole PC stuttered, 2026-11-02), the video model is unloaded before it
+  (MMAudio moves its ~6.5 GB to the GPU outside ComfyUI's memory management). The NSFW fine-tune of MMAudio was
+  tried and dropped: it put women's moans into every clip.
 
 ## Jobs
 
@@ -232,7 +241,8 @@ of a scene.
   `progress.phase` `WAITING`, `position` its place), so it holds the other users up by one scene at most; it stays
   ahead of the later jobs of its own user, which start only after its join. A failed
   step (the storyboard or a scene) is tried once more; a second failure fails the job. The join runs right after the
-  last scene (`JOINING`, ~20 s, ComfyUI core `LoadVideo`, `Video Slice`, `ConcatenateVideo`, sound included).
+  last scene (`JOINING`, ~20 s, ComfyUI core `LoadVideo`, `Video Slice`, `ConcatenateVideo`, sound included; a Wan
+  video with `sound` gets its sound here: `GetVideoComponents` + MMAudio + `CreateVideo`, +~25 s for 20 s).
 - `progress.scene` / `progress.scenes`: the scene the phase belongs to and how many (absent for a single clip).
 - The job JSON has `"scenes": [{"seconds": 10, "prompt": "...", "english": "..."}]` (`prompt` absent until the
   storyboard is written, `english` only for a translated scene); absent for a single clip.

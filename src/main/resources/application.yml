@@ -145,8 +145,9 @@ imagegen:
     - id: wan22-i2v-fastmove
       kind: VIDEO
       title: Wan 2.2 Fast Move
-      description: Video from a start image, lively motion, no sound; the face of a real person may drift. 832x480 (16 fps).
-      typical-seconds: 160
+      description: Video from a start image, lively motion; the sound is added from the picture by another model (noises, no speech). The face of a real person may drift. 832x480 (16 fps).
+      # +~25 s for the sound (MMAudio, 2026-11-02)
+      typical-seconds: 185
       prompt-style: WAN
       clip-seconds: 6
       scene-seconds: 5
@@ -157,6 +158,8 @@ imagegen:
         - { name: seconds, type: INT, default: '5', min: 2, max: 20 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
         - { name: keepFace, type: BOOL, default: 'false' }
+        # the sound made from the frames by MMAudio (comfy/SoundGraphs); a long video gets one in its join
+        - { name: sound, type: BOOL, default: 'true' }
         - { name: seed, type: SEED }
     - id: ltx25-nsfw-i2v
       kind: VIDEO

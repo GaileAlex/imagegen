@@ -13,8 +13,13 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH=$VIRTUAL_ENV/bin:$PATH
 RUN python3 -m venv $VIRTUAL_ENV && pip install --no-cache-dir --upgrade pip
 
+# Every pip install below keeps to the package versions of the running image (see constraints.txt)
+COPY constraints.txt /opt/constraints.txt
+ENV PIP_CONSTRAINT=/opt/constraints.txt
+
+# the dependencies of torch at their pinned versions come from PyPI, torch itself (+cu130) only from its index
 RUN pip install --no-cache-dir torch==2.14.1 torchvision==0.29.1 torchaudio==2.11.0 \
-    --index-url https://download.pytorch.org/whl/cu130
+    --index-url https://download.pytorch.org/whl/cu130 --extra-index-url https://pypi.org/simple
 
 ARG COMFYUI_COMMIT=63be2f9b82ad0dac88a7ceaa28a9cf3154125a18
 ARG GGUF_COMMIT=6ea2651e7df66d7585f6ffee804b20e92fb38b8a
@@ -40,6 +45,17 @@ RUN tar -xzf /tmp/swarmui.tar.gz -C /tmp \
 ARG KREA2EDIT_COMMIT=13ef60f20828949becada815d3cbc371eb5ccaab
 RUN git clone https://github.com/lbouaraba/comfyui-krea2edit /app/custom_nodes/comfyui-krea2edit && \
     cd /app/custom_nodes/comfyui-krea2edit && git checkout $KREA2EDIT_COMMIT && rm -rf .git node.zip tests
+
+# Sound for the silent Wan videos: MMAudio nodes (MIT), models in /models/mmaudio (NSFW fine-tune + base + BigVGAN)
+# (patch_mmaudio.py: frames picked by the real frame rate, short sound made 8 s and cut, video model unloaded first)
+ARG MMAUDIO_COMMIT=8eaeb72edc3aaf2059b57f2d96a1f6f689f19ae2
+COPY patch_mmaudio.py /tmp/patch_mmaudio.py
+RUN git clone https://github.com/kijai/ComfyUI-MMAudio /app/custom_nodes/ComfyUI-MMAudio && \
+    cd /app/custom_nodes/ComfyUI-MMAudio && git checkout $MMAUDIO_COMMIT && rm -rf .git example_workflows && \
+    python /tmp/patch_mmaudio.py /app/custom_nodes/ComfyUI-MMAudio && rm /tmp/patch_mmaudio.py && \
+    pip install --no-cache-dir librosa==1.0.0 torchdiffeq==0.2.5 timm==1.0.30 omegaconf==2.4.0 \
+        open-clip-torch==3.3.0 accelerate==1.15.0 ftfy==6.3.1 && \
+    ln -s /models/mmaudio /app/models/mmaudio
 
 # Triton compiles its launchers at run time (the int8 kernels of comfy-kitchen: Muse, the LTX encoder)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc python3-dev && \

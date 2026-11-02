@@ -18,8 +18,10 @@ public class WorkflowValues {
 
     /** Client param of a video: the start image is given to the model again later in the clip, see FaceAnchor */
     public static final String KEEP_FACE = "keepFace";
+    /** Client param of a soundless video model: its sound is made from the frames by another model, see SoundGraphs */
+    public static final String SOUND = "sound";
     /** Client params the workflow has no input for: they only decide other values or the shape of the graph */
-    public static final Set<String> CLIENT_ONLY_PARAMS = Set.of("seconds", "orientation", KEEP_FACE);
+    public static final Set<String> CLIENT_ONLY_PARAMS = Set.of("seconds", "orientation", KEEP_FACE, SOUND);
 
     /**
      * @param fps        frames per second of the model
@@ -82,7 +84,7 @@ public class WorkflowValues {
     /**
      * The values of one scene of a long video: its prompt, its length, its own seed; the first scene starts from the
      * start image of the job (or the text alone), the next ones from the tail of the scene before. The face anchor is
-     * off: it would pull every scene back to the start image.
+     * off: it would pull every scene back to the start image. No sound either: the join makes one for all the scenes.
      *
      * @param scene 1-based
      */
@@ -93,6 +95,7 @@ public class WorkflowValues {
         values.put("prompt", current.modelPrompt());
         values.put("seed", job.getSeed() + scene - 1);
         values.put(KEEP_FACE, false);
+        values.put(SOUND, false);
         values.put("filenamePrefix", job.getId() + "-scene" + scene);
         int frames = profile.fps() * current.seconds();
         if (scene == 1) {

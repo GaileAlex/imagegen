@@ -164,6 +164,48 @@ class ComfyUiGatewayTest {
     }
 
     @Test
+    void wanGetsItsSoundFromTheDecodedFramesByDefault() {
+        var template = new WorkflowRepository(MAPPER).get("wan22-i2v-fastmove");
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a cat jumps on the sofa", "seed", 42), null);
+
+        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
+
+        assertThat(graph.at("/402/class_type").asString()).isEqualTo("MMAudioSampler");
+        assertThat(graph.at("/402/inputs/images").toString()).isEqualTo("[\"15\",0]");
+        // the rate of the video node: the patched sampler picks the frames by time
+        assertThat(graph.at("/402/inputs/fps").asInt()).isEqualTo(16);
+        assertThat(graph.at("/402/inputs/prompt").asString()).isEqualTo("a cat jumps on the sofa");
+        assertThat(graph.at("/402/inputs/seed").asLong()).isEqualTo(42);
+        assertThat(graph.at("/400/inputs/mmaudio_model").asString()).isEqualTo(SoundGraphs.MODEL_FILE);
+        assertThat(graph.at("/16/inputs/audio").toString()).isEqualTo("[\"402\",0]");
+    }
+
+    @Test
+    void wanWithoutSoundAndItsScenesHaveNoSoundNodes() {
+        var template = new WorkflowRepository(MAPPER).get("wan22-i2v-fastmove");
+        Job silent = job("wan22-i2v-fastmove", params("prompt", "walks", "sound", false), null);
+        Job story = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10), null);
+        story.setScenes(List.of(new Scene(5, "he walks", null), new Scene(5, "he sits", null)));
+
+        ObjectNode plain = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(silent));
+        ObjectNode scene = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.scene(story, 1));
+
+        assertThat(plain.has("402")).isFalse();
+        assertThat(plain.at("/16/inputs/audio").isMissingNode()).isTrue();
+        // the join gives the whole video one sound
+        assertThat(scene.has("402")).isFalse();
+    }
+
+    @Test
+    void theSoundPromptHasNoSceneMarksAndFitsTheTextEncoder() {
+        assertThat(SoundGraphs.prompt("[Scene 1 · 5 s · Wan]\nA cat walks.\n\n[Scene 2 · 5 s · Wan]\nIt jumps."))
+                .isEqualTo("A cat walks. It jumps.");
+        String longText = "word ".repeat(200);
+        assertThat(SoundGraphs.prompt(longText)).hasSizeLessThanOrEqualTo(SoundGraphs.MAX_PROMPT).endsWith("word");
+        assertThat(SoundGraphs.prompt(null)).isEmpty();
+    }
+
+    @Test
     void ltxKeepsTheFaceWithGuideFramesOnBothStages() {
         var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
         Job job = job("ltx25-nsfw-i2v", params("prompt", "walks", "seconds", 8, "keepFace", true), null);
@@ -538,6 +580,38 @@ class ComfyUiGatewayTest {
         assertThat(List.of(result.width(), result.height())).containsExactly(704, 1216);
         assertThat(files.scene(job.getId(), 1)).doesNotExist();
         assertThat(files.tail(job.getId())).doesNotExist();
+        server.verify();
+    }
+
+    @Test
+    void aLongWanVideoGetsOneSoundInItsJoin() throws IOException {
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "seed", 3), null);
+        job.setScenes(List.of(new Scene(5, "[Scene 1 · 5 s]\nhe walks", null), new Scene(5, "he sits", null)));
+        Files.write(files.scene(job.getId(), 1), new byte[]{1});
+        Files.write(files.scene(job.getId(), 2), new byte[]{2});
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/prompt"))
+                .andExpect(jsonPath("$.prompt['310'].inputs.video[0]").value("300"))
+                .andExpect(jsonPath("$.prompt['402'].inputs.images[0]").value("310"))
+                .andExpect(jsonPath("$.prompt['402'].inputs.fps[0]").value("310"))
+                .andExpect(jsonPath("$.prompt['402'].inputs.fps[1]").value(2))
+                .andExpect(jsonPath("$.prompt['402'].inputs.prompt").value("he walks he sits"))
+                .andExpect(jsonPath("$.prompt['311'].inputs.audio[0]").value("402"))
+                .andExpect(jsonPath("$.prompt['301'].inputs.video[0]").value("311"))
+                .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
+        String done = HISTORY_DONE.formatted("301",
+                "{\"images\":[{\"filename\":\"j.mp4\",\"subfolder\":\"\",\"type\":\"output\"}]}");
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/view?filename=j.mp4")))
+                .andRespond(withSuccess(new byte[]{5}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(BASE + "/history")).andRespond(withSuccess());
+
+        gateway.joinScenes(job, sink, later());
+
         server.verify();
     }
 
