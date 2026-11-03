@@ -1,3 +1,7 @@
+# Next to the prod container cv-imagegen-app on 8390; the dev profile of CV calls this port
+server:
+  port: 8391
+
 imagegen:
   comfyui-url: http://localhost:8188
   data-dir: ./data
