@@ -3,7 +3,7 @@ package ee.gaile.imagegen.image;
 import com.drew.imaging.jpeg.JpegMetadataReader;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifIFD0Directory;
-import ee.gaile.imagegen.service.InvalidParamsException;
+import ee.gaile.imagegen.job.InvalidParamsException;
 import lombok.experimental.UtilityClass;
 
 import javax.imageio.ImageIO;
@@ -182,7 +182,8 @@ public class InputImages {
         return flatten(image, background);
     }
 
-    private static BufferedImage flatten(BufferedImage image, Color background) {
+    /** An opaque copy of the picture, on the background where it was transparent */
+    static BufferedImage flatten(BufferedImage image, Color background) {
         BufferedImage rgb = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = rgb.createGraphics();
         try {

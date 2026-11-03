@@ -3,6 +3,8 @@
   "output": "17",
   "decoded": "15",
   "keepFace": "WAN_LAST_FRAME",
+  "video": {"fps": 16, "width": 832, "height": 480, "halfStages": false, "tailFrames": 9,
+            "note": "frames = fps * seconds + 1 (4n+1); the tail (~0.6 s, 4n+1) starts the next scene of a long video"},
   "timing": "832x480 81 frames: 157 s with the model load",
   "params": {
     "image": {

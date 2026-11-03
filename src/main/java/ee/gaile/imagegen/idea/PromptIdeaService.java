@@ -8,8 +8,10 @@ import ee.gaile.imagegen.job.JobQueue;
 import ee.gaile.imagegen.model.ModelCatalogue;
 import ee.gaile.imagegen.model.ModelDefinition;
 import ee.gaile.imagegen.model.ParamDefinition;
+import ee.gaile.imagegen.model.ParamNames;
 import ee.gaile.imagegen.job.Scene;
-import ee.gaile.imagegen.service.InvalidParamsException;
+import ee.gaile.imagegen.job.InvalidParamsException;
+import ee.gaile.imagegen.service.RequestParts;
 import ee.gaile.imagegen.service.ScenePrompts;
 import ee.gaile.imagegen.service.SourceImages;
 import lombok.RequiredArgsConstructor;
@@ -52,7 +54,10 @@ public class PromptIdeaService {
      * @param image       the start picture of the user, null when there is none or it is given as sourceJobId
      */
     public PromptIdea write(long userId, String requestJson, byte[] image) {
-        IdeaRequest request = parse(requestJson);
+        IdeaRequest request = RequestParts.read(mapper, requestJson, IdeaRequest.class);
+        if (request == null || request.videoModel() == null) {
+            throw new InvalidParamsException("The request has no videoModel");
+        }
         String idea = request.idea() == null ? "" : request.idea().strip();
         if (idea.length() > MAX_IDEA_LENGTH) {
             throw new InvalidParamsException("The idea is longer than " + MAX_IDEA_LENGTH + " characters");
@@ -141,30 +146,9 @@ public class PromptIdeaService {
         }
     }
 
-    private IdeaRequest parse(String json) {
-        if (json == null || json.isBlank()) {
-            throw new InvalidParamsException("The request part is missing");
-        }
-        try {
-            IdeaRequest request = mapper.readValue(json, IdeaRequest.class);
-            if (request == null || request.videoModel() == null) {
-                throw new InvalidParamsException("The request has no videoModel");
-            }
-            return request;
-        } catch (RuntimeException e) {
-            if (e instanceof InvalidParamsException invalid) {
-                throw invalid;
-            }
-            throw new InvalidParamsException("The request is not valid JSON of the expected shape");
-        }
-    }
-
     /** The asked length within the range of the mode, else its default */
     private static int seconds(ModelDefinition model, Integer asked) {
-        ParamDefinition param = model.params().stream()
-                .filter(candidate -> candidate.name().equals("seconds"))
-                .findFirst()
-                .orElse(null);
+        ParamDefinition param = model.param(ParamNames.SECONDS).orElse(null);
         if (param == null) {
             return asked != null ? asked : 5;
         }

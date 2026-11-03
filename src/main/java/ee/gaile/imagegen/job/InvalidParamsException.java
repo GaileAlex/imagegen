@@ -1,4 +1,4 @@
-package ee.gaile.imagegen.service;
+package ee.gaile.imagegen.job;
 
 /** The request cannot be run: unknown mode, a param out of range, no or an unreadable image (400 invalid_params) */
 public class InvalidParamsException extends RuntimeException {

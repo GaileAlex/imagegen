@@ -7,7 +7,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * here is always current.
  */
 @Slf4j
-@Component
+@Repository
 @RequiredArgsConstructor
 public class FileJobRepository implements JobStore {
 
@@ -53,12 +53,7 @@ public class FileJobRepository implements JobStore {
                     Job job = mapper.readValue(Files.readAllBytes(file), JobRecord.class).toJob();
                     index.put(job.getId(), job);
                     if (!job.getStatus().isFinished()) {
-                        job.setStatus(JobStatus.FAILED);
-                        job.setError("service restarted");
-                        job.setFinishedAt(clock.instant());
-                        save(job);
-                        // the scenes made so far of a long video will never be joined
-                        files.deleteScenes(job.getId());
+                        failRestarted(job);
                         restarted++;
                     }
                 } catch (RuntimeException | IOException e) {
@@ -71,9 +66,30 @@ public class FileJobRepository implements JobStore {
         log.info("Loaded {} job records, {} failed by the restart", index.size(), restarted);
     }
 
-    /** The file is written aside and moved over the old one, so a crash leaves a whole record */
+    /** A job that was queued or running is loaded as failed; what is left of it must not stop the loading */
+    private void failRestarted(Job job) {
+        job.setStatus(JobStatus.FAILED);
+        job.setError("service restarted");
+        job.setFinishedAt(clock.instant());
+        try {
+            save(job);
+            // the scenes made so far of a long video will never be joined
+            files.deleteScenes(job.getId());
+        } catch (UncheckedIOException e) {
+            log.warn("Job {} failed by the restart, not cleaned up: {}", job.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * The file is written aside and moved over the old one, so a crash leaves a whole record. A deleted job is not
+     * written back: the queue may save it once more after the user deleted it (as it finished).
+     */
     @Override
     public synchronized void save(Job job) {
+        if (job.isDeleted()) {
+            log.debug("Job {} is deleted, its record is not written", job.getId());
+            return;
+        }
         Path target = files.record(job.getId());
         Path temp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
@@ -131,7 +147,10 @@ public class FileJobRepository implements JobStore {
 
     @Override
     public synchronized void delete(UUID id) {
-        index.remove(id);
+        Job job = index.remove(id);
+        if (job != null) {
+            job.setDeleted(true);
+        }
         files.deleteAll(id);
     }
 

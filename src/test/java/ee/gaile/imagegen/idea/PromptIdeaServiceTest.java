@@ -6,7 +6,7 @@ import ee.gaile.imagegen.job.JobQueue;
 import ee.gaile.imagegen.job.JobResult;
 import ee.gaile.imagegen.job.JobStatus;
 import ee.gaile.imagegen.model.TestCatalogue;
-import ee.gaile.imagegen.service.InvalidParamsException;
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.service.SourceImages;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.storage.JobStore;

@@ -73,7 +73,8 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
 - EDIT / INPAINT: `width`/`height` are not client params; they come from the photo: scaled to at most ~1.05 MP
   (1168x880 for 4:3, 1024x1024 for a square), both sides rounded down to a multiple of 16.
 - VIDEO size is an `orientation` ENUM (`landscape` / `portrait`): Wan 832x480 / 480x832, LTX 1216x704 / 704x1216
-  (the service sets the LTX stage-1 `halfWidth`/`halfHeight`).
+  (the service sets the LTX stage-1 `halfWidth`/`halfHeight`). The frame rate, the size, the half-size first stage
+  and the tail frames of a long video come from `"video"` of `<id>.params.json`, required for a VIDEO mode.
 - VIDEO length is a client param in seconds (`seconds`: Wan 2-20, LTX 2-30), converted to frames: 16 * s + 1 for Wan (16 fps),
   24 * s + 1 for LTX (24 fps); both satisfy the frame rules of the models (4n+1, 8n+1). LTX 10 s ~195 s, 12 s ~255 s.
   `clipSeconds` of a VIDEO mode (Wan 6, LTX 12) is the longest clip made in one run: a longer video is a long video

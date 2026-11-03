@@ -3,9 +3,11 @@ package ee.gaile.imagegen.comfy;
 import ee.gaile.imagegen.job.Progress;
 import tools.jackson.databind.JsonNode;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -15,6 +17,12 @@ import java.util.function.Consumer;
 class PromptWatcher implements Consumer<ComfyEvent> {
 
     private static final int MAX_EARLY_EVENTS = 100;
+    /**
+     * The events of a prompt that older ComfyUI sends without its id; any other event without one (the "status" of
+     * the queue, the monitors of custom nodes) tells nothing of the prompt and is no sign that it is alive
+     */
+    private static final Set<String> PROMPT_EVENTS = Set.of("progress", "executing", "execution_success",
+            "execution_error", "execution_interrupted");
 
     enum Status {
         SUCCESS,
@@ -30,15 +38,18 @@ class PromptWatcher implements Consumer<ComfyEvent> {
 
     private final String outputNode;
     private final Consumer<Progress> progress;
+    private final Clock clock;
     private final List<ComfyEvent> early = new ArrayList<>();
     private String promptId;
     private boolean sampled;
     private Outcome outcome;
-    private Instant lastEvent = Instant.now();
+    private Instant lastEvent;
 
-    PromptWatcher(String outputNode, Consumer<Progress> progress) {
+    PromptWatcher(String outputNode, Consumer<Progress> progress, Clock clock) {
         this.outputNode = outputNode;
         this.progress = progress;
+        this.clock = clock;
+        this.lastEvent = clock.instant();
     }
 
     synchronized void bind(String id) {
@@ -85,10 +96,11 @@ class PromptWatcher implements Consumer<ComfyEvent> {
 
     private void handle(ComfyEvent event) {
         String eventPrompt = event.promptId();
-        if (eventPrompt != null && !eventPrompt.equals(promptId) || outcome != null) {
+        boolean ours = eventPrompt != null ? eventPrompt.equals(promptId) : PROMPT_EVENTS.contains(event.type());
+        if (!ours || outcome != null) {
             return;
         }
-        lastEvent = Instant.now();
+        lastEvent = clock.instant();
         JsonNode data = event.data();
         switch (event.type()) {
             case "progress" -> {

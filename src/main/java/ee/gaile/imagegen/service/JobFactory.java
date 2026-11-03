@@ -1,10 +1,12 @@
 package ee.gaile.imagegen.service;
 
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.model.ModelDefinition;
 import ee.gaile.imagegen.model.ParamDefinition;
+import ee.gaile.imagegen.model.ParamNames;
 import ee.gaile.imagegen.model.config.VideoPromptStyle;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -24,14 +26,12 @@ import java.util.stream.Collectors;
 /**
  * Turns the params of a request into a {@link Job}: checks them against the catalogue, fills in the defaults and
  * the random seed, takes the size of an edited photo. What the workflow needs beyond that (frames, file names) is
- * derived by {@link WorkflowValues} when the job runs.
+ * derived by comfy/WorkflowValues when the job runs.
  */
 @Component
 public class JobFactory {
 
     public static final long MAX_SEED = Integer.MAX_VALUE;
-    /** Service param of a video made from the text alone: the workflow skips its start image */
-    public static final String TEXT_ONLY = "textOnly";
     /** The scenes of a 30 s video written out take ~5000 characters */
     private static final int MAX_TEXT_LENGTH = 12000;
     /** A scene shorter than this is mostly the frames it starts from */
@@ -53,26 +53,27 @@ public class JobFactory {
     }
 
     /**
-     * A job with its input image, if the mode takes one.
-     */
-    public Job create(UUID id, long userId, String userName, ModelDefinition model, Map<String, Object> raw,
-                      Dimension photoSize) {
-        return create(id, userId, userName, model, raw, photoSize, model.acceptsImage());
-    }
-
-    /**
      * @param photoSize size of the prepared photo, needed (and only used) for EDIT and INPAINT
-     * @param withImage the job has an input image; a video without one is marked {@value #TEXT_ONLY}
+     * @param withImage the job has an input image; a video without one is marked textOnly
      * @throws InvalidParamsException an unknown param, a missing required one or a value out of its range
      */
     public Job create(UUID id, long userId, String userName, ModelDefinition model, Map<String, Object> raw,
                       Dimension photoSize, boolean withImage) {
-        Map<String, Object> params = validate(model, raw);
+        return build(id, userId, userName, model, validate(model, raw), photoSize, withImage);
+    }
+
+    /**
+     * The job of {@link #create} from params that {@link #validate} has checked already (with their seed).
+     *
+     * @param params the answer of {@link #validate}; filled in further
+     */
+    Job build(UUID id, long userId, String userName, ModelDefinition model, Map<String, Object> params,
+              Dimension photoSize, boolean withImage) {
         if (model.acceptsImage() && !withImage) {
             if (model.needsImage()) {
                 throw new InvalidParamsException(model.id() + " needs an image");
             }
-            params.put(TEXT_ONLY, true);
+            params.put(ParamNames.TEXT_ONLY, true);
         }
         if (model.kind() == JobKind.EDIT || model.kind() == JobKind.INPAINT) {
             if (photoSize == null) {
@@ -99,27 +100,27 @@ public class JobFactory {
      * @return null for a single clip
      */
     private List<Scene> scenes(ModelDefinition model, Map<String, Object> params) {
-        List<Scene> marked = ScenePrompts.parse((String) params.get("prompt"));
+        List<Scene> marked = ScenePrompts.parse((String) params.get(ParamNames.PROMPT));
         if (marked.size() == 1) {
             // one scene is a plain clip
-            params.put("prompt", marked.getFirst().prompt());
+            params.put(ParamNames.PROMPT, marked.getFirst().prompt());
         }
-        int seconds = params.get("seconds") instanceof Number number ? number.intValue() : 0;
+        int seconds = params.get(ParamNames.SECONDS) instanceof Number number ? number.intValue() : 0;
         if (marked.size() > 1) {
             int total = marked.stream().mapToInt(Scene::seconds).sum();
             int longest = maxSeconds(model);
-            VideoPromptStyle style = ScenePrompts.style((String) params.get("prompt"));
+            VideoPromptStyle style = ScenePrompts.style((String) params.get(ParamNames.PROMPT));
             boolean fits = (style == null || style == model.promptStyle()) && total <= longest
                     && marked.stream().allMatch(scene ->
                     scene.seconds() >= MIN_SCENE_SECONDS && scene.seconds() <= model.sceneSeconds());
             if (fits) {
-                params.put("seconds", total);
+                params.put(ParamNames.SECONDS, total);
                 return List.copyOf(marked);
             }
             seconds = Math.clamp(Math.max(total, seconds), MIN_SCENE_SECONDS, longest);
-            params.put("seconds", seconds);
+            params.put(ParamNames.SECONDS, seconds);
             if (seconds <= model.clipSeconds()) {
-                params.put("prompt", marked.stream().map(Scene::prompt).collect(Collectors.joining("\n")));
+                params.put(ParamNames.PROMPT, marked.stream().map(Scene::prompt).collect(Collectors.joining("\n")));
                 return null;
             }
         }
@@ -132,15 +133,15 @@ public class JobFactory {
     }
 
     private static int maxSeconds(ModelDefinition model) {
-        return model.params().stream()
-                .filter(param -> param.name().equals("seconds") && param.max() != null)
+        return model.param(ParamNames.SECONDS)
+                .filter(param -> param.max() != null)
                 .map(param -> param.max().intValue())
-                .findFirst()
                 .orElse(model.clipSeconds());
     }
 
     /**
-     * @return all the params of the mode with the defaults and the seed filled in
+     * @return all the params of the mode with the defaults and the seed filled in, in a map of its own
+     * @throws InvalidParamsException an unknown param, a missing required one or a value out of its range
      */
     Map<String, Object> validate(ModelDefinition model, Map<String, Object> raw) {
         Map<String, Object> given = raw != null ? raw : Map.of();

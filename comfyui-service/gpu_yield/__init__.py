@@ -10,8 +10,8 @@ model fills the VRAM. The waiting prompt then gives VRAM back: pages of its mode
 are evicted, and the headroom of aimdo is raised for the hold, so a fault does not take the room again. When the hold
 ends the headroom goes back and the pages come back on their next use as far as the VRAM allows.
 
-The cancel (POST /interrupt) ends a wait at once. A hold is capped (MAX_HOLD), so a lost release never stops ComfyUI
-for long.
+The cancel (POST /interrupt) ends a wait at once. A hold ends by itself and is capped (MAX_HOLD): the callers renew it
+while the speech goes on, so a caller that is gone never stops ComfyUI for long.
 """
 import collections
 import ctypes
@@ -163,8 +163,6 @@ def _give_back(room):
 def _wait():
     """Waits in the prompt while the GPU is held."""
     global _waiting, _room_done
-    if torch.compiler.is_compiling():
-        return
     started = _now()
     with _cond:
         _waiting = True
@@ -286,17 +284,6 @@ async def hold(request):
         _cond.notify_all()
     if started:
         log.info("GPU held for %.0f s%s", seconds, f", room {room // MB} MB" if room else "")
-    return web.json_response(_state())
-
-
-@PromptServer.instance.routes.post("/gpu_yield/release")
-async def release(request):
-    global _hold_until
-    with _cond:
-        if _hold_until:
-            _hold_until = _now()
-            _expire()
-        _cond.notify_all()
     return web.json_response(_state())
 
 

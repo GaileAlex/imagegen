@@ -43,11 +43,11 @@ public class JobFiles {
     }
 
     public Path input(UUID id) {
-        return directory.resolve(id + ".input.png");
+        return directory.resolve(inputName(id));
     }
 
     public Path mask(UUID id) {
-        return directory.resolve(id + ".mask.png");
+        return directory.resolve(maskName(id));
     }
 
     /** The small picture of the result for the history cards, made on the first request (Thumbnails) */
@@ -72,18 +72,39 @@ public class JobFiles {
 
     /** A scene of a long video (1-based), kept until the scenes are joined */
     public Path scene(UUID id, int number) {
-        return directory.resolve(id + ".scene" + number + ".mp4");
+        return directory.resolve(sceneName(id, number));
     }
 
     /** The last frames of the latest scene of a long video (an animated png): the next scene starts from them */
     public Path tail(UUID id) {
-        return directory.resolve(id + ".tail.png");
+        return directory.resolve(tailName(id));
+    }
+
+    /*
+     * The names of the files that go to ComfyUI as they are: the workflow names them in its inputs, so they are the
+     * same here and in its input folder.
+     */
+
+    public static String inputName(UUID id) {
+        return id + ".input.png";
+    }
+
+    public static String maskName(UUID id) {
+        return id + ".mask.png";
+    }
+
+    public static String sceneName(UUID id, int number) {
+        return id + ".scene" + number + ".mp4";
+    }
+
+    public static String tailName(UUID id) {
+        return id + ".tail.png";
     }
 
     /** The scenes and the tail of a long video: no use once joined, failed or cancelled */
     public void deleteScenes(UUID id) {
         delete(id + ".scene*.mp4");
-        delete(id + ".tail.png");
+        delete(tailName(id));
     }
 
     /** The record and every file of the job */

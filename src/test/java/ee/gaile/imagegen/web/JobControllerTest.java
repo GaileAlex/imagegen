@@ -9,7 +9,7 @@ import ee.gaile.imagegen.job.JobStatus;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.Progress;
 import ee.gaile.imagegen.service.ComfyUnavailableException;
-import ee.gaile.imagegen.service.InvalidParamsException;
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.service.JobService;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.storage.JobStore;

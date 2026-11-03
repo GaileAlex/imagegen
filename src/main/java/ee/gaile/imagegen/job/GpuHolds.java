@@ -17,9 +17,6 @@ import java.util.Deque;
 @Component
 public class GpuHolds {
 
-    /** Never held: the deadlines of the tests that do not care */
-    public static final GpuHolds NONE = new GpuHolds(Clock.systemUTC());
-
     static final Duration KEEP = Duration.ofHours(3);
 
     private final Clock clock;

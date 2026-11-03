@@ -1,6 +1,7 @@
 package ee.gaile.imagegen.comfy;
 
 import ee.gaile.imagegen.job.Deadline;
+import ee.gaile.imagegen.job.Deadlines;
 import ee.gaile.imagegen.job.GpuHolds;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobFailedException;
@@ -75,12 +76,13 @@ class ComfyUiGatewayTest {
         server = MockRestServiceServer.bindTo(builder).build();
         RestClient client = builder.build();
         files = new JobFiles(directory);
-        gateway = new ComfyUiGateway(client, client, new WorkflowRepository(MAPPER), files, new ComfyFiles(""), events, MAPPER,
-                Clock.systemUTC(), Duration.ofMillis(10));
+        gateway = new ComfyUiGateway(new ComfyApi(client, client), new WorkflowRepository(MAPPER), files,
+                new ComfyFiles(""), events, MAPPER, Clock.systemUTC(), Duration.ofMillis(10));
     }
 
     private Job job(String model, Map<String, Object> params, Dimension photo) {
-        return factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model(model), params, photo);
+        return factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model(model), params, photo,
+                TestCatalogue.model(model).acceptsImage());
     }
 
     private Map<String, Object> params(Object... keyValues) {
@@ -98,7 +100,7 @@ class ComfyUiGatewayTest {
     }
 
     private Deadline later() {
-        return new Deadline(Instant.now().plusSeconds(30), Duration.ofMinutes(10));
+        return Deadlines.withoutHolds(Instant.now().plusSeconds(30), Duration.ofMinutes(10));
     }
 
     @Test
@@ -107,7 +109,7 @@ class ComfyUiGatewayTest {
                 "width", 512, "height", 768, "seed", 99), null);
         var template = new WorkflowRepository(MAPPER).get("muse-txt2img");
 
-        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
+        ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(job, template));
 
         assertThat(graph.at("/6/inputs/prompt").asString()).isEqualTo("a cat");
         assertThat(graph.at("/7/inputs/prompt").asString()).isEqualTo("blur");
@@ -135,7 +137,7 @@ class ComfyUiGatewayTest {
                 null);
         var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
 
-        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
+        ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(job, template));
 
         assertThat(graph.at("/11/inputs/length").asInt()).isEqualTo(49);
         assertThat(graph.at("/13/inputs/frames_number").asInt()).isEqualTo(49);
@@ -154,8 +156,8 @@ class ComfyUiGatewayTest {
         // off by default: it holds the person to the pose of the picture
         Job free = job("wan22-i2v-fastmove", params("prompt", "walks"), null);
 
-        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(kept));
-        ObjectNode plain = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(free));
+        ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(kept, template));
+        ObjectNode plain = gateway.buildWorkflow(template, WorkflowValues.of(free, template));
 
         assertThat(graph.at("/12/class_type").asString()).isEqualTo("WanFirstLastFrameToVideo");
         assertThat(graph.at("/12/inputs/end_image").toString()).isEqualTo("[\"11\",0]");
@@ -169,7 +171,7 @@ class ComfyUiGatewayTest {
         var template = new WorkflowRepository(MAPPER).get("wan22-i2v-fastmove");
         Job job = job("wan22-i2v-fastmove", params("prompt", "a cat jumps on the sofa", "seed", 42), null);
 
-        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
+        ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(job, template));
 
         assertThat(graph.at("/402/class_type").asString()).isEqualTo("MMAudioSampler");
         assertThat(graph.at("/402/inputs/images").toString()).isEqualTo("[\"15\",0]");
@@ -188,8 +190,8 @@ class ComfyUiGatewayTest {
         Job story = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10), null);
         story.setScenes(List.of(new Scene(5, "he walks", null), new Scene(5, "he sits", null)));
 
-        ObjectNode plain = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(silent));
-        ObjectNode scene = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.scene(story, 1));
+        ObjectNode plain = gateway.buildWorkflow(template, WorkflowValues.of(silent, template));
+        ObjectNode scene = gateway.buildWorkflow(template, WorkflowValues.scene(story, template, 1));
 
         assertThat(plain.has("402")).isFalse();
         assertThat(plain.at("/16/inputs/audio").isMissingNode()).isTrue();
@@ -211,7 +213,7 @@ class ComfyUiGatewayTest {
         var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
         Job job = job("ltx25-nsfw-i2v", params("prompt", "walks", "seconds", 8, "keepFace", true), null);
 
-        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
+        ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(job, template));
 
         // stage 1: 100-102 guide the half size latent at frames 64, 128 and the last, 103 crops them off
         assertThat(graph.at("/100/inputs/latent").toString()).isEqualTo("[\"12\",0]");
@@ -242,7 +244,7 @@ class ComfyUiGatewayTest {
         Job job = factory.create(UUID.randomUUID(), 1, "u", TestCatalogue.model("ltx25-nsfw-i2v"),
                 params("prompt", "walks", "keepFace", true), null, false);
 
-        ObjectNode graph = gateway.buildWorkflow(template, ee.gaile.imagegen.service.WorkflowValues.of(job));
+        ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(job, template));
 
         assertThat(job.getParams()).containsEntry("keepFace", true);
         assertThat(graph.has("100")).isFalse();
@@ -396,7 +398,7 @@ class ComfyUiGatewayTest {
                 MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE + "/interrupt")).andExpect(method(HttpMethod.POST)).andRespond(withSuccess());
 
-        Deadline past = new Deadline(Instant.now().minusSeconds(1), Duration.ofMinutes(10));
+        Deadline past = Deadlines.withoutHolds(Instant.now().minusSeconds(1), Duration.ofMinutes(10));
 
         assertThatThrownBy(() -> gateway.run(job, sink, past))
                 .isInstanceOf(JobFailedException.class).hasMessage("timeout");
@@ -411,7 +413,7 @@ class ComfyUiGatewayTest {
                 MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE + "/interrupt")).andExpect(method(HttpMethod.POST)).andRespond(withSuccess());
         // far from the fixed time, but the socket is up and stays silent
-        Deadline silent = new Deadline(Instant.now().plusSeconds(30), Duration.ofMillis(50));
+        Deadline silent = Deadlines.withoutHolds(Instant.now().plusSeconds(30), Duration.ofMillis(50));
 
         assertThatThrownBy(() -> gateway.run(job, sink, silent))
                 .isInstanceOf(JobFailedException.class).hasMessageStartingWith("timeout: ComfyUI reported nothing");
@@ -428,7 +430,7 @@ class ComfyUiGatewayTest {
                 + "[[\"execution_error\",{\"exception_message\":\"boom\"}]]}}}";
         server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
-        Deadline silent = new Deadline(Instant.now().plusSeconds(30), Duration.ofMillis(1));
+        Deadline silent = Deadlines.withoutHolds(Instant.now().plusSeconds(30), Duration.ofMillis(1));
 
         assertThatThrownBy(() -> gateway.run(job, sink, silent)).hasMessage("boom");
         server.verify();
@@ -531,15 +533,57 @@ class ComfyUiGatewayTest {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE);
         MockRestServiceServer other = MockRestServiceServer.bindTo(builder).build();
         RestClient client = builder.build();
-        ComfyUiGateway slow = new ComfyUiGateway(client, client, new WorkflowRepository(MAPPER), files, new ComfyFiles(""), events, MAPPER,
-                clock, Duration.ofMillis(10));
+        ComfyUiGateway slow = new ComfyUiGateway(new ComfyApi(client, client), new WorkflowRepository(MAPPER), files,
+                new ComfyFiles(""), events, MAPPER, clock, Duration.ofMillis(10));
         other.expect(requestTo(BASE + "/prompt")).andRespond(withSuccess("{\"prompt_id\":\"p1\"}",
                 MediaType.APPLICATION_JSON));
         other.expect(requestTo(BASE + "/interrupt")).andRespond(withSuccess());
 
         assertThatThrownBy(() -> slow.run(job("muse-txt2img", params("prompt", "x"), null), sink,
-                new Deadline(clock.instant(), Duration.ofMinutes(10))))
+                Deadlines.withoutHolds(clock.instant(), Duration.ofMinutes(10))))
                 .hasMessage("timeout");
+    }
+
+    @Test
+    void aJobCancelledBeforeItsPromptIsNeverQueued() {
+        Job job = job("muse-txt2img", params("prompt", "x"), null);
+        job.setCancelRequested(true);
+
+        assertThatThrownBy(() -> gateway.run(job, sink, later())).hasMessage("interrupted");
+        // no /prompt: the mock server would have failed the run otherwise
+        server.verify();
+    }
+
+    @Test
+    void aCancelIsSentToItsPromptUntilThePromptEnds() {
+        MutableClock clock = new MutableClock();
+        RestClient.Builder builder = RestClient.builder().baseUrl(BASE);
+        MockRestServiceServer other = MockRestServiceServer.bindTo(builder).build();
+        RestClient client = builder.build();
+        ComfyUiGateway cancelling = new ComfyUiGateway(new ComfyApi(client, client),
+                new WorkflowRepository(MAPPER), files, new ComfyFiles(""), events, MAPPER, clock, Duration.ofMillis(10));
+        Job job = job("muse-txt2img", params("prompt", "x"), null);
+        other.expect(requestTo(BASE + "/prompt")).andRespond(withSuccess("{\"prompt_id\":\"p1\"}",
+                MediaType.APPLICATION_JSON));
+        // the cancel comes while the prompt is queued; ComfyUI clears an interrupt that comes before its start, so
+        // the first one is lost here and the next poll sends it again
+        events.onSubscribe = listener -> job.setCancelRequested(true);
+        other.expect(requestTo(BASE + "/interrupt")).andExpect(jsonPath("$.prompt_id").value("p1"))
+                .andRespond(withSuccess());
+        other.expect(requestTo(BASE + "/history/p1")).andRespond(request -> {
+            clock.advance(Duration.ofSeconds(1));
+            return withSuccess("{}", MediaType.APPLICATION_JSON).createResponse(request);
+        });
+        other.expect(requestTo(BASE + "/interrupt")).andExpect(jsonPath("$.prompt_id").value("p1"))
+                .andRespond(withSuccess());
+        other.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess("""
+                {"p1": {"status": {"status_str": "error", "completed": false, "messages": [
+                  ["execution_interrupted", {"prompt_id": "p1"}]]}, "outputs": {}}}""", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> cancelling.run(job, sink,
+                Deadlines.withoutHolds(clock.instant().plusSeconds(30), Duration.ofMinutes(10))))
+                .hasMessage("interrupted");
+        other.verify();
     }
 
     private Job longVideo() {

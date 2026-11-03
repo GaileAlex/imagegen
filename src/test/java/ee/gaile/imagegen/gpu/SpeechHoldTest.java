@@ -1,11 +1,10 @@
 package ee.gaile.imagegen.gpu;
 
 import ee.gaile.imagegen.job.FakeGateway;
-import ee.gaile.imagegen.job.FakeTranslator;
 import ee.gaile.imagegen.job.GpuHolds;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobQueue;
-import ee.gaile.imagegen.job.JobQueueTest;
+import ee.gaile.imagegen.job.TestQueues;
 import ee.gaile.imagegen.job.MutableClock;
 import ee.gaile.imagegen.model.TestCatalogue;
 import ee.gaile.imagegen.service.JobFactory;
@@ -14,7 +13,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,10 +28,7 @@ class SpeechHoldTest {
 
     @BeforeEach
     void setUp() {
-        queue = new JobQueue(gateway, new FakeTranslator(), job -> {
-        }, job -> {
-        }, JobQueueTest.PROPERTIES, clock, () -> {
-        }, job -> List.of(), holds);
+        queue = TestQueues.plain(gateway, clock, holds);
         queue.start();
         speechHold = new SpeechHold(holds, gateway, queue);
     }
@@ -45,7 +40,7 @@ class SpeechHoldTest {
 
     private Job job() {
         return new JobFactory(clock).create(UUID.randomUUID(), 1, "u", TestCatalogue.model("muse-txt2img"),
-                Map.of("prompt", "x"), null);
+                Map.of("prompt", "x"), null, false);
     }
 
     @Test

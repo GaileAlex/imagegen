@@ -51,9 +51,9 @@ public class SpeechHold {
         JobQueue.QueueState state = queue.state();
         if (roomMb > 0 && freeMb >= 0 && freeMb < roomMb && state.idle()) {
             boolean unloaded = queue.unloadIfIdle();
-            log.info("Room for the speech: {} MB free of {} MB asked, {}", freeMb, roomMb, !unloaded
-                    ? "a job started meanwhile"
-                    : state.loaded() ? "the model of the last job unloaded" : "nothing of imagegen was loaded");
+            log.info("Room for the speech: {} MB free of {} MB asked, {}", freeMb, roomMb, unloaded
+                    ? state.loaded() ? "the model of the last job unloaded" : "nothing of imagegen was loaded"
+                    : queue.state().idle() ? "the unload failed" : "a job started meanwhile");
         }
         return new Held(duration.toMillis() / 1000.0, freeMb);
     }

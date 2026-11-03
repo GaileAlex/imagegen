@@ -9,6 +9,8 @@ import java.util.Map;
 public class FakeTranslator implements PromptTranslator {
 
     public volatile boolean failing;
+    /** No translation model is set: nothing is translated */
+    public volatile boolean off;
     public volatile int calls;
     public volatile int unloads;
 
@@ -17,6 +19,9 @@ public class FakeTranslator implements PromptTranslator {
         calls++;
         if (failing) {
             throw new JobFailedException("prompt translation failed");
+        }
+        if (off) {
+            return Map.of();
         }
         Map<String, String> translations = new LinkedHashMap<>();
         texts.forEach((name, text) -> translations.put(name, "EN:" + text));

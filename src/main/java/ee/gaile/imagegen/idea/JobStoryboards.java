@@ -7,7 +7,7 @@ import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.job.Storyboards;
 import ee.gaile.imagegen.model.ModelCatalogue;
 import ee.gaile.imagegen.model.ModelDefinition;
-import ee.gaile.imagegen.service.JobFactory;
+import ee.gaile.imagegen.model.ParamNames;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.storage.JobStore;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +39,7 @@ public class JobStoryboards implements Storyboards {
     public List<Scene> write(Job job) {
         ModelDefinition model = catalogue.find(job.getModel())
                 .orElseThrow(() -> new JobFailedException("unknown model " + job.getModel()));
-        byte[] picture = Boolean.TRUE.equals(job.getParams().get(JobFactory.TEXT_ONLY)) ? null : startImage(job);
+        byte[] picture = Boolean.TRUE.equals(job.getParams().get(ParamNames.TEXT_ONLY)) ? null : startImage(job);
         Start start = picture != null ? Start.PICTURE : Start.TEXT;
         List<Integer> lengths = job.getScenes().stream().map(Scene::seconds).toList();
         boolean portrait = "portrait".equals(job.getParams().get("orientation"));

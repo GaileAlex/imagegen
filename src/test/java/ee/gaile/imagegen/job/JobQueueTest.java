@@ -37,6 +37,8 @@ public class JobQueueTest {
     private final AtomicInteger failingSaves = new AtomicInteger();
     /** The next storyboards that fail */
     private final AtomicInteger failingStoryboards = new AtomicInteger();
+    /** What happens while the language model writes a storyboard */
+    private volatile Runnable duringStoryboard = () -> { };
     private JobQueue queue;
 
     @BeforeEach
@@ -52,15 +54,18 @@ public class JobQueueTest {
                 throw new JobFailedException("no storyboard");
             }
             storyboarded.add(job);
+            duringStoryboard.run();
             return job.getScenes().stream().map(scene -> scene.withPrompt("written " + scene.seconds())).toList();
         };
-        queue = new JobQueue(gateway, translator, sources, job -> {
+        JobRepository repository = job -> {
             if (failingSaves.getAndUpdate(n -> Math.max(n - 1, 0)) > 0) {
                 throw new UncheckedIOException(new IOException("no space left on device"));
             }
             saved.add(job.getStatus());
-        }, PROPERTIES, clock,
-                () -> guestLeaves.add(gateway.started.size()), storyboards, new GpuHolds(clock));
+        };
+        GpuGuest guest = () -> guestLeaves.add(gateway.started.size());
+        JobRunner runner = new JobRunner(gateway, translator, sources, repository, guest, storyboards);
+        queue = new JobQueue(gateway, translator, repository, PROPERTIES, clock, guest, new GpuHolds(clock), runner);
         queue.start();
     }
 
@@ -522,5 +527,43 @@ public class JobQueueTest {
         await().until(() -> job.getStatus() == JobStatus.FAILED);
         assertThat(job.getError()).isEqualTo("prompt translation failed");
         assertThat(gateway.started).isEmpty();
+    }
+
+    @Test
+    void aLongVideoCancelledDuringItsStoryboardMakesNoScene() {
+        Job film = longVideo(1, "film", new Scene(10, null, null), new Scene(8, null, null));
+        duringStoryboard = () -> queue.cancel(film);
+
+        queue.submit(film);
+
+        await().until(() -> film.getStatus() == JobStatus.CANCELLED);
+        assertThat(storyboarded).containsExactly(film);
+        assertThat(gateway.started).isEmpty();
+        assertThat(gateway.discarded).containsExactly(film);
+    }
+
+    @Test
+    void withoutATranslationModelTheScenesGoAsTypedAndNothingIsSavedForThem() throws InterruptedException {
+        Job english = longVideo(1, "film", new Scene(10, "plays the guitar", null), new Scene(10, "stands up", null));
+        queue.submit(english);
+        gateway.awaitRunning();
+        gateway.complete(english);
+        gateway.awaitRunning();
+        gateway.complete(english);
+        await().until(() -> english.getStatus() == JobStatus.DONE);
+        int savesOfAFilm = saved.size();
+        saved.clear();
+
+        translator.off = true;
+        Job russian = longVideo(1, "film", new Scene(10, "играет на гитаре", null), new Scene(10, "встаёт", null));
+        queue.submit(russian);
+        gateway.awaitRunning();
+        gateway.complete(russian);
+        gateway.awaitRunning();
+        gateway.complete(russian);
+
+        await().until(() -> russian.getStatus() == JobStatus.DONE);
+        assertThat(russian.getScenes()).extracting(Scene::modelPrompt).containsExactly("играет на гитаре", "встаёт");
+        assertThat(saved).hasSize(savesOfAFilm);
     }
 }

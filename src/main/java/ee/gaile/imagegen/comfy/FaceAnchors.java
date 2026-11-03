@@ -4,11 +4,13 @@ import ee.gaile.imagegen.model.workflow.FaceAnchor;
 import lombok.experimental.UtilityClass;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
-import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import static ee.gaile.imagegen.comfy.Graphs.link;
+import static ee.gaile.imagegen.comfy.Graphs.node;
 
 /**
  * Rewires a filled video workflow so that it keeps the face of the start image, see {@link FaceAnchor}. The node ids
@@ -16,7 +18,7 @@ import java.util.List;
  * ltx25-nsfw-i2v another.
  */
 @UtilityClass
-public class FaceAnchors {
+class FaceAnchors {
 
     /** LTX: one guide frame about every this many seconds, the last one on the last frame */
     static final double LTX_GUIDE_SECONDS = 2.7;
@@ -25,16 +27,19 @@ public class FaceAnchors {
      * into twitches), at 0.3 the face and the room drift away; 0.5 keeps both the face and the motion (test 2026-10-27)
      */
     static final double LTX_GUIDE_STRENGTH = 0.5;
-    private static final int LTX_FPS = 24;
     /** LTX compresses 8 frames into one latent frame: guides go on its boundaries */
     private static final int LTX_FRAME_STEP = 8;
     /** Ids of the added nodes start here, far above those of the templates */
     private static final int FIRST_NEW_NODE = 100;
 
-    public static void apply(ObjectNode graph, FaceAnchor anchor, int frames) {
+    /**
+     * @param frames the frames of the clip
+     * @param fps    its frame rate
+     */
+    static void apply(ObjectNode graph, FaceAnchor anchor, int frames, int fps) {
         switch (anchor) {
             case WAN_LAST_FRAME -> wanLastFrame(graph);
-            case LTX_GUIDES -> ltxGuides(graph, frames);
+            case LTX_GUIDES -> ltxGuides(graph, frames, fps);
         }
     }
 
@@ -49,8 +54,8 @@ public class FaceAnchors {
      * The guide frames go between the first-frame conditioning and the sampler on both stages; each stage gets its
      * own guider with the guided conditioning, and the guides are cropped off the latent after the sampler.
      */
-    private static void ltxGuides(ObjectNode graph, int frames) {
-        List<Integer> guides = ltxGuideFrames(frames);
+    private static void ltxGuides(ObjectNode graph, int frames, int fps) {
+        List<Integer> guides = ltxGuideFrames(frames, fps);
         int[] next = {FIRST_NEW_NODE};
 
         // stage 1: half size latent of node 12, sampled by node 19 into node 20, upscaled by node 21
@@ -77,8 +82,8 @@ public class FaceAnchors {
     /**
      * @return frame indexes of the guides: evenly spread, on latent frame boundaries, the last one is -1 (the end)
      */
-    static List<Integer> ltxGuideFrames(int frames) {
-        double seconds = (frames - 1) / (double) LTX_FPS;
+    static List<Integer> ltxGuideFrames(int frames, int fps) {
+        double seconds = (frames - 1) / (double) fps;
         int count = Math.max(1, (int) Math.round(seconds / LTX_GUIDE_SECONDS));
         List<Integer> guides = new ArrayList<>();
         for (int i = 1; i < count; i++) {
@@ -94,7 +99,7 @@ public class FaceAnchors {
         ArrayNode[] links = {positive, negative, latent};
         for (int frame : guides) {
             String id = id(next);
-            ObjectNode inputs = graph.putObject(id).put("class_type", "LTXVAddGuide").putObject("inputs");
+            ObjectNode inputs = node(graph, id, "LTXVAddGuide");
             inputs.set("positive", links[0]);
             inputs.set("negative", links[1]);
             inputs.set("vae", link("3", 0));
@@ -109,7 +114,7 @@ public class FaceAnchors {
 
     private static String cropGuides(ObjectNode graph, int[] next, ArrayNode[] guided, ArrayNode sampled) {
         String id = id(next);
-        ObjectNode inputs = graph.putObject(id).put("class_type", "LTXVCropGuides").putObject("inputs");
+        ObjectNode inputs = node(graph, id, "LTXVCropGuides");
         inputs.set("positive", guided[0]);
         inputs.set("negative", guided[1]);
         inputs.set("latent", sampled);
@@ -126,9 +131,5 @@ public class FaceAnchors {
 
     private static String id(int[] next) {
         return String.valueOf(next[0]++);
-    }
-
-    private static ArrayNode link(String node, int output) {
-        return JsonNodeFactory.instance.arrayNode().add(node).add(output);
     }
 }
