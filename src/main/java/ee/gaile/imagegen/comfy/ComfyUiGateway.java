@@ -4,27 +4,20 @@ import ee.gaile.imagegen.job.ComfyGateway;
 import ee.gaile.imagegen.job.Deadline;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobFailedException;
-import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.JobResult;
 import ee.gaile.imagegen.job.Progress;
 import ee.gaile.imagegen.job.Scene;
-import ee.gaile.imagegen.service.JobFactory;
-import ee.gaile.imagegen.service.WorkflowValues;
+import ee.gaile.imagegen.model.ParamNames;
 import ee.gaile.imagegen.model.workflow.ParamSpec;
 import ee.gaile.imagegen.model.workflow.WorkflowRepository;
 import ee.gaile.imagegen.model.workflow.WorkflowTemplate;
+import ee.gaile.imagegen.storage.JobFiles;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.JsonNode;
@@ -38,7 +31,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -46,13 +38,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
  * Runs a job on ComfyUI: fills the workflow template with the params of the job, uploads its input images, queues the
  * prompt, follows it over the websocket (or by polling /history while the socket is down) and stores the output file
- * next to the job record.
+ * next to the job record. The HTTP calls themselves are {@link ComfyApi}.
  */
 @Slf4j
 @Component
@@ -62,12 +55,10 @@ public class ComfyUiGateway implements ComfyGateway {
     private static final Duration SILENCE = Duration.ofSeconds(10);
     /** Failed /history calls in a row for this long: ComfyUI is gone, the job will not finish */
     private static final Duration UNREACHABLE = Duration.ofSeconds(60);
-    private static final int MAX_ERROR_BODY = 300;
     /** Start image of a video made from the text alone: never used, so a black 64x64 */
     private static final byte[] PLACEHOLDER = placeholder();
 
-    private final RestClient client;
-    private final RestClient probeClient;
+    private final ComfyApi comfy;
     private final WorkflowRepository workflows;
     private final JobFiles files;
     private final ComfyFiles comfyFiles;
@@ -77,16 +68,14 @@ public class ComfyUiGateway implements ComfyGateway {
     private final Duration pollInterval;
 
     @Autowired
-    public ComfyUiGateway(@Qualifier("comfyClient") RestClient client,
-                          @Qualifier("comfyProbeClient") RestClient probeClient, WorkflowRepository workflows,
-                          JobFiles files, ComfyFiles comfyFiles, ComfyEvents events, ObjectMapper mapper, Clock clock) {
-        this(client, probeClient, workflows, files, comfyFiles, events, mapper, clock, Duration.ofSeconds(2));
+    ComfyUiGateway(ComfyApi comfy, WorkflowRepository workflows, JobFiles files, ComfyFiles comfyFiles,
+                   ComfyEvents events, ObjectMapper mapper, Clock clock) {
+        this(comfy, workflows, files, comfyFiles, events, mapper, clock, Duration.ofSeconds(2));
     }
 
-    ComfyUiGateway(RestClient client, RestClient probeClient, WorkflowRepository workflows, JobFiles files,
-                   ComfyFiles comfyFiles, ComfyEvents events, ObjectMapper mapper, Clock clock, Duration pollInterval) {
-        this.client = client;
-        this.probeClient = probeClient;
+    ComfyUiGateway(ComfyApi comfy, WorkflowRepository workflows, JobFiles files, ComfyFiles comfyFiles,
+                   ComfyEvents events, ObjectMapper mapper, Clock clock, Duration pollInterval) {
+        this.comfy = comfy;
         this.workflows = workflows;
         this.files = files;
         this.comfyFiles = comfyFiles;
@@ -119,13 +108,33 @@ public class ComfyUiGateway implements ComfyGateway {
         files.deleteScenes(job.getId());
     }
 
+    @Override
+    public void interrupt() {
+        comfy.interrupt();
+    }
+
+    @Override
+    public void free() {
+        comfy.free();
+    }
+
+    @Override
+    public long hold(Duration duration, long roomMb) {
+        return comfy.hold(duration, roomMb);
+    }
+
+    @Override
+    public boolean isUp() {
+        return comfy.isUp();
+    }
+
     /** The failures of the HTTP calls to ComfyUI as failures of the job */
     private <T> T calling(IoCall<T> call) {
         try {
             return call.run();
         } catch (RestClientResponseException e) {
             throw new JobFailedException("ComfyUI answered " + e.getStatusCode().value() + ": "
-                    + abbreviate(e.getResponseBodyAsString()), e);
+                    + ComfyApi.abbreviate(e.getResponseBodyAsString()), e);
         } catch (RestClientException e) {
             throw new JobFailedException("ComfyUI is not reachable: " + e.getMessage(), e);
         } catch (IOException e) {
@@ -136,41 +145,6 @@ public class ComfyUiGateway implements ComfyGateway {
     @FunctionalInterface
     private interface IoCall<T> {
         T run() throws IOException;
-    }
-
-    @Override
-    public void interrupt() {
-        client.post().uri("/interrupt").retrieve().toBodilessEntity();
-    }
-
-    @Override
-    public void free() {
-        client.post().uri("/free").contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("unload_models", true, "free_memory", true))
-                .retrieve().toBodilessEntity();
-    }
-
-    /**
-     * POST /gpu_yield/hold of our node (comfyui-service/gpu_yield): the prompt waits before its next layer, and gives
-     * VRAM back for the room. Short timeouts: the speech must not wait for a busy ComfyUI.
-     */
-    @Override
-    public long hold(Duration duration, long roomMb) {
-        JsonNode state = probeClient.post().uri("/gpu_yield/hold").contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("seconds", duration.toMillis() / 1000.0, "room_mb", roomMb))
-                .retrieve().body(JsonNode.class);
-        return state != null ? state.path("freeMb").asLong(-1) : -1;
-    }
-
-    @Override
-    public boolean isUp() {
-        try {
-            probeClient.get().uri("/system_stats").retrieve().toBodilessEntity();
-            return true;
-        } catch (RestClientException e) {
-            log.debug("ComfyUI does not answer: {}", e.getMessage());
-            return false;
-        }
     }
 
     /**
@@ -188,7 +162,7 @@ public class ComfyUiGateway implements ComfyGateway {
             }
             for (String target : spec.targets()) {
                 int dot = target.indexOf('.');
-                JsonNode node = graph.get(target.substring(0, dot));
+                JsonNode node = dot > 0 ? graph.get(target.substring(0, dot)) : null;
                 if (node == null || !(node.get("inputs") instanceof ObjectNode inputs)) {
                     throw new IllegalStateException("Workflow " + template.id() + " has no target " + target);
                 }
@@ -196,28 +170,30 @@ public class ComfyUiGateway implements ComfyGateway {
             }
         }
         // a video from the text alone has no face to keep
-        if (template.faceAnchor() != null && Boolean.TRUE.equals(values.get(WorkflowValues.KEEP_FACE))
-                && !Boolean.TRUE.equals(values.get(JobFactory.TEXT_ONLY))) {
-            FaceAnchors.apply(graph, template.faceAnchor(), ((Number) values.get("frames")).intValue());
+        if (template.faceAnchor() != null && Boolean.TRUE.equals(values.get(ParamNames.KEEP_FACE))
+                && !Boolean.TRUE.equals(values.get(ParamNames.TEXT_ONLY))) {
+            FaceAnchors.apply(graph, template.faceAnchor(), ((Number) values.get("frames")).intValue(),
+                    WorkflowValues.video(template).fps());
         }
-        if (Boolean.TRUE.equals(values.get(WorkflowValues.SOUND))) {
+        if (Boolean.TRUE.equals(values.get(ParamNames.SOUND))) {
             if (template.decodedNode() == null) {
                 throw new IllegalStateException("Workflow " + template.id() + " cannot get a sound");
             }
             SoundGraphs.addToClip(graph, template.decodedNode(), template.outputNode(),
-                    SoundGraphs.prompt((String) values.get("prompt")), ((Number) values.get("seed")).longValue());
+                    SoundGraphs.prompt((String) values.get(ParamNames.PROMPT)),
+                    ((Number) values.get("seed")).longValue());
         }
         return graph;
     }
 
     private JobResult runPrompt(Job job, Consumer<Progress> progress, Deadline deadline) throws IOException {
         WorkflowTemplate template = workflows.get(job.getModel());
-        ObjectNode graph = buildWorkflow(template, WorkflowValues.of(job));
+        ObjectNode graph = buildWorkflow(template, WorkflowValues.of(job, template));
         uploadInputs(job);
         try {
             Ran ran = execute(job, graph, template.outputNode(), progress, deadline);
-            JobResult result = storeOutput(job, ran.outputs().path(template.outputNode()));
-            forget(ran.promptId());
+            JobResult result = storeOutput(job, template, ran.outputs().path(template.outputNode()));
+            comfy.forget(ran.promptId());
             return result;
         } finally {
             deleteInputs(job);
@@ -233,24 +209,24 @@ public class ComfyUiGateway implements ComfyGateway {
         if (template.decodedNode() == null) {
             throw new IllegalStateException("Workflow " + template.id() + " cannot make scenes");
         }
-        Map<String, Object> values = WorkflowValues.scene(job, scene);
+        Map<String, Object> values = WorkflowValues.scene(job, template, scene);
         ObjectNode graph = buildWorkflow(template, values);
-        String tail = SceneGraphs.addTail(graph, template.decodedNode(), WorkflowValues.tailFrames(job),
-                WorkflowValues.fps(job), (String) values.get("filenamePrefix"));
+        String tail = SceneGraphs.addTail(graph, template.decodedNode(), template.video().tailFrames(),
+                template.video().fps(), (String) values.get("filenamePrefix"));
         if (scene == 1) {
             uploadInputs(job);
         } else {
-            upload(new FileSystemResource(files.tail(job.getId())));
+            comfy.upload(new FileSystemResource(files.tail(job.getId())));
         }
         try {
             Ran ran = execute(job, graph, template.outputNode(), progress, deadline);
             fetch(firstFile(ran.outputs().path(template.outputNode())), files.scene(job.getId(), scene));
             fetch(firstFile(ran.outputs().path(tail)), files.tail(job.getId()));
-            forget(ran.promptId());
+            comfy.forget(ran.promptId());
             log.info("Job {}: scene {} of {} made", job.getId(), scene, job.getScenes().size());
         } finally {
             deleteInputs(job);
-            comfyFiles.delete("input", "", WorkflowValues.tailName(job));
+            comfyFiles.delete("input", "", JobFiles.tailName(job.getId()));
         }
     }
 
@@ -259,16 +235,17 @@ public class ComfyUiGateway implements ComfyGateway {
      * asks for it (the scenes are made without); the scene files go afterwards
      */
     private JobResult join(Job job, Consumer<Progress> progress, Deadline deadline) throws IOException {
+        WorkflowTemplate template = workflows.get(job.getModel());
         int count = job.getScenes().size();
         List<String> names = new ArrayList<>(count);
         try {
             for (int scene = 1; scene <= count; scene++) {
-                upload(new FileSystemResource(files.scene(job.getId(), scene)));
-                names.add(WorkflowValues.sceneName(job, scene));
+                comfy.upload(new FileSystemResource(files.scene(job.getId(), scene)));
+                names.add(JobFiles.sceneName(job.getId(), scene));
             }
-            double repeated = (double) WorkflowValues.tailFrames(job) / WorkflowValues.fps(job);
+            double repeated = (double) template.video().tailFrames() / template.video().fps();
             ObjectNode graph = SceneGraphs.join(names, repeated, job.getId().toString());
-            if (Boolean.TRUE.equals(job.getParams().get(WorkflowValues.SOUND))) {
+            if (Boolean.TRUE.equals(job.getParams().get(ParamNames.SOUND))) {
                 String story = job.getScenes().stream().map(Scene::modelPrompt).filter(Objects::nonNull)
                         .collect(Collectors.joining(" "));
                 SoundGraphs.addToJoin(graph, SoundGraphs.prompt(story), job.getSeed());
@@ -277,33 +254,30 @@ public class ComfyUiGateway implements ComfyGateway {
             String contentType = "video/mp4";
             Path target = files.result(job.getId(), contentType);
             fetch(firstFile(ran.outputs().path(SceneGraphs.JOIN_SAVE)), target);
-            forget(ran.promptId());
+            comfy.forget(ran.promptId());
             files.deleteScenes(job.getId());
-            int[] size = WorkflowValues.videoSize(job);
-            return new JobResult(contentType, Files.size(target), size[0], size[1],
-                    (double) WorkflowValues.seconds(job));
+            return videoResult(job, template, contentType, target);
         } finally {
             names.forEach(name -> comfyFiles.delete("input", "", name));
         }
     }
 
     /**
-     * Queues the graph and waits for its end.
+     * Queues the graph and waits for its end. A job cancelled before is not queued at all.
      *
      * @return the prompt and its outputs by node id
      */
     private Ran execute(Job job, ObjectNode graph, String outputNode, Consumer<Progress> progress,
                         Deadline deadline) {
-        PromptWatcher watcher = new PromptWatcher(outputNode, progress);
+        if (job.isCancelRequested()) {
+            throw new JobFailedException("interrupted");
+        }
+        PromptWatcher watcher = new PromptWatcher(outputNode, progress, clock);
         Runnable unsubscribe = events.subscribe(watcher);
         try {
-            String promptId = queue(graph);
+            String promptId = comfy.queue(graph, events.clientId());
             watcher.bind(promptId);
-            // A cancel while the workflow was being prepared found no prompt to interrupt
-            if (job.isCancelRequested()) {
-                interruptQuietly();
-            }
-            PromptWatcher.Outcome outcome = await(promptId, watcher, deadline);
+            PromptWatcher.Outcome outcome = await(promptId, watcher, deadline, job::isCancelRequested);
             switch (outcome.status()) {
                 case ERROR -> throw new JobFailedException(outcome.message());
                 case INTERRUPTED -> throw new JobFailedException("interrupted");
@@ -321,59 +295,15 @@ public class ComfyUiGateway implements ComfyGateway {
     private record Ran(String promptId, JsonNode outputs) {
     }
 
-    private void uploadInputs(Job job) {
-        if (job.getKind() == JobKind.IMAGE) {
-            return;
-        }
-        Path input = files.input(job.getId());
-        if (Boolean.TRUE.equals(job.getParams().get(JobFactory.TEXT_ONLY))) {
-            // The workflow skips the start image, but ComfyUI still wants the file of its LoadImage node
-            upload(new ByteArrayResource(PLACEHOLDER) {
-                @Override
-                public String getFilename() {
-                    return input.getFileName().toString();
-                }
-            });
-            return;
-        }
-        upload(new FileSystemResource(input));
-        if (job.getKind() == JobKind.INPAINT) {
-            upload(new FileSystemResource(files.mask(job.getId())));
-        }
-    }
-
-    private void upload(Resource image) {
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("image", image);
-        body.add("overwrite", "true");
-        client.post().uri("/upload/image").contentType(MediaType.MULTIPART_FORM_DATA).body(body)
-                .retrieve().toBodilessEntity();
-    }
-
-    /** The uploaded photo and mask have no use in ComfyUI after the prompt, whatever its end */
-    private void deleteInputs(Job job) {
-        if (job.getKind() != JobKind.IMAGE) {
-            comfyFiles.delete("input", "", files.input(job.getId()).getFileName().toString());
-            comfyFiles.delete("input", "", files.mask(job.getId()).getFileName().toString());
-        }
-    }
-
-    private String queue(ObjectNode graph) {
-        JsonNode answer = client.post().uri("/prompt").contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("prompt", graph, "client_id", events.clientId()))
-                .retrieve().body(JsonNode.class);
-        String promptId = answer != null ? answer.path("prompt_id").asString("") : "";
-        if (promptId.isEmpty()) {
-            throw new JobFailedException("ComfyUI did not accept the workflow: " + abbreviate(String.valueOf(answer)));
-        }
-        return promptId;
-    }
-
     /**
      * Waits for the end of the prompt: events of the socket normally, /history when the socket is down or quiet.
+     * A cancel is sent to the prompt again every poll until it ends: ComfyUI clears the interrupt when it starts a
+     * prompt (execution.py), so one that came just before the start is lost.
      */
-    private PromptWatcher.Outcome await(String promptId, PromptWatcher watcher, Deadline deadline) {
+    private PromptWatcher.Outcome await(String promptId, PromptWatcher watcher, Deadline deadline,
+                                        BooleanSupplier cancelled) {
         Instant failingSince = null;
+        Instant cancelSent = null;
         try {
             while (true) {
                 PromptWatcher.Outcome outcome = watcher.outcome();
@@ -381,20 +311,23 @@ public class ComfyUiGateway implements ComfyGateway {
                     return outcome;
                 }
                 Instant now = clock.instant();
+                if (cancelled.getAsBoolean() && (cancelSent == null || !now.isBefore(cancelSent.plus(pollInterval)))) {
+                    interruptQuietly(promptId);
+                    cancelSent = now;
+                }
                 if (deadline.passed(now)) {
-                    interruptQuietly();
+                    interruptQuietly(promptId);
                     throw new JobFailedException("timeout");
                 }
-                Instant wallNow = Instant.now();
                 // a prompt that waits for the speech of the chat is silent, not hung
-                Duration stalled = deadline.silence(watcher.lastEvent(), wallNow);
+                Duration stalled = deadline.silence(watcher.lastEvent(), now);
                 // Without the socket no event can come: the silence says nothing then
                 if (events.isConnected() && stalled.compareTo(deadline.stall()) > 0) {
-                    interruptQuietly();
+                    interruptQuietly(promptId);
                     throw new JobFailedException("timeout: ComfyUI reported nothing for " + stalled.toMinutes()
                             + " min");
                 }
-                boolean quiet = Duration.between(watcher.lastEvent(), wallNow).compareTo(SILENCE) > 0;
+                boolean quiet = Duration.between(watcher.lastEvent(), now).compareTo(SILENCE) > 0;
                 if (!events.isConnected() || quiet) {
                     try {
                         PromptWatcher.Outcome fromHistory = outcomeFromHistory(promptId);
@@ -415,7 +348,7 @@ public class ComfyUiGateway implements ComfyGateway {
         } catch (InterruptedException e) {
             // The service is stopping: the prompt must not go on with nobody to collect it
             Thread.currentThread().interrupt();
-            interruptQuietly();
+            interruptQuietly(promptId);
             throw new JobFailedException("interrupted", e);
         }
     }
@@ -424,7 +357,7 @@ public class ComfyUiGateway implements ComfyGateway {
      * @return null while the prompt is not finished in /history
      */
     private PromptWatcher.Outcome outcomeFromHistory(String promptId) {
-        JsonNode entry = history(promptId);
+        JsonNode entry = comfy.history(promptId);
         if (entry == null) {
             return null;
         }
@@ -456,7 +389,7 @@ public class ComfyUiGateway implements ComfyGateway {
     private JsonNode awaitHistory(String promptId, String outputNode, Deadline deadline) {
         try {
             while (true) {
-                JsonNode entry = history(promptId);
+                JsonNode entry = comfy.history(promptId);
                 if (entry != null && entry.path("outputs").has(outputNode)) {
                     return entry;
                 }
@@ -471,20 +404,40 @@ public class ComfyUiGateway implements ComfyGateway {
         }
     }
 
-    /**
-     * @return the entry of the prompt, null while there is none
-     */
-    private JsonNode history(String promptId) {
-        JsonNode root = client.get().uri("/history/{id}", promptId).retrieve().body(JsonNode.class);
-        JsonNode entry = root != null ? root.get(promptId) : null;
-        return entry != null && !entry.isNull() ? entry : null;
+    private void uploadInputs(Job job) {
+        if (job.getKind() == JobKind.IMAGE) {
+            return;
+        }
+        Path input = files.input(job.getId());
+        if (Boolean.TRUE.equals(job.getParams().get(ParamNames.TEXT_ONLY))) {
+            // The workflow skips the start image, but ComfyUI still wants the file of its LoadImage node
+            comfy.upload(new ByteArrayResource(PLACEHOLDER) {
+                @Override
+                public String getFilename() {
+                    return input.getFileName().toString();
+                }
+            });
+            return;
+        }
+        comfy.upload(new FileSystemResource(input));
+        if (job.getKind() == JobKind.INPAINT) {
+            comfy.upload(new FileSystemResource(files.mask(job.getId())));
+        }
+    }
+
+    /** The uploaded photo and mask have no use in ComfyUI after the prompt, whatever its end */
+    private void deleteInputs(Job job) {
+        if (job.getKind() != JobKind.IMAGE) {
+            comfyFiles.delete("input", "", JobFiles.inputName(job.getId()));
+            comfyFiles.delete("input", "", JobFiles.maskName(job.getId()));
+        }
     }
 
     /**
      * The first file the output node produced: SaveImage lists "images", SaveVideo lists its video under "images"
      * too (with "animated"), other nodes use "gifs" or "videos"; the code does not depend on the key.
      */
-    private JobResult storeOutput(Job job, JsonNode output) throws IOException {
+    private JobResult storeOutput(Job job, WorkflowTemplate template, JsonNode output) throws IOException {
         JsonNode file = firstFile(output);
         if (file == null) {
             throw new JobFailedException("ComfyUI returned no output");
@@ -493,17 +446,20 @@ public class ComfyUiGateway implements ComfyGateway {
         Path target = files.result(job.getId(), contentType);
         fetch(file, target);
 
-        long size = Files.size(target);
         if (job.getKind() == JobKind.VIDEO) {
-            int[] videoSize = WorkflowValues.videoSize(job);
-            return new JobResult(contentType, size, videoSize[0], videoSize[1],
-                    (double) WorkflowValues.seconds(job));
+            return videoResult(job, template, contentType, target);
         }
         BufferedImage image = ImageIO.read(target.toFile());
         if (image == null) {
             throw new JobFailedException("The result of ComfyUI is not an image");
         }
-        return new JobResult(contentType, size, image.getWidth(), image.getHeight(), null);
+        return new JobResult(contentType, Files.size(target), image.getWidth(), image.getHeight(), null);
+    }
+
+    private static JobResult videoResult(Job job, WorkflowTemplate template, String contentType, Path file)
+            throws IOException {
+        int[] size = WorkflowValues.videoSize(job, template);
+        return new JobResult(contentType, Files.size(file), size[0], size[1], (double) WorkflowValues.seconds(job));
     }
 
     /** Downloads an output file of ComfyUI to the target and deletes it from the output folder */
@@ -514,11 +470,11 @@ public class ComfyUiGateway implements ComfyGateway {
         String filename = file.path("filename").asString();
         String subfolder = file.path("subfolder").asString("");
         String type = file.path("type").asString("output");
-        download(filename, subfolder, type, target);
+        comfy.download(filename, subfolder, type, target);
         comfyFiles.delete(type, subfolder, filename);
     }
 
-    private JsonNode firstFile(JsonNode output) {
+    private static JsonNode firstFile(JsonNode output) {
         for (Map.Entry<String, JsonNode> entry : output.properties()) {
             for (JsonNode candidate : entry.getValue()) {
                 if (candidate.isObject() && candidate.has("filename")) {
@@ -529,7 +485,7 @@ public class ComfyUiGateway implements ComfyGateway {
         return null;
     }
 
-    private String contentType(String filename) {
+    private static String contentType(String filename) {
         String lower = filename.toLowerCase();
         if (lower.endsWith(".png")) {
             return "image/png";
@@ -540,44 +496,13 @@ public class ComfyUiGateway implements ComfyGateway {
         throw new JobFailedException("Unexpected output file " + filename);
     }
 
-    private void download(String filename, String subfolder, String type, Path target) throws IOException {
-        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
-        client.get().uri(uri -> uri.path("/view").queryParam("filename", filename)
-                        .queryParam("subfolder", subfolder).queryParam("type", type).build())
-                .exchange((request, response) -> {
-                    if (response.getStatusCode().isError()) {
-                        throw new JobFailedException("ComfyUI answered " + response.getStatusCode().value()
-                                + " for the output " + filename);
-                    }
-                    Files.copy(response.getBody(), temp, StandardCopyOption.REPLACE_EXISTING);
-                    return null;
-                });
-        Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-    }
-
-    /** The prompt stays in the memory of ComfyUI otherwise; failing to clear it is not worth failing the job */
-    private void forget(String promptId) {
+    /** Stops this prompt, if ComfyUI runs it; a failure is only logged, the job ends anyway */
+    private void interruptQuietly(String promptId) {
         try {
-            client.post().uri("/history").contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("delete", List.of(promptId))).retrieve().toBodilessEntity();
-        } catch (RestClientException e) {
-            log.debug("Could not clear the history entry {}: {}", promptId, e.getMessage());
-        }
-    }
-
-    private void interruptQuietly() {
-        try {
-            interrupt();
+            comfy.interrupt(promptId);
         } catch (RuntimeException e) {
             log.warn("Could not interrupt ComfyUI: {}", e.getMessage());
         }
-    }
-
-    private String abbreviate(String text) {
-        if (text == null) {
-            return "";
-        }
-        return text.length() > MAX_ERROR_BODY ? text.substring(0, MAX_ERROR_BODY) + "..." : text;
     }
 
     private static byte[] placeholder() {

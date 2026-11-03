@@ -243,4 +243,20 @@ class FileJobRepositoryTest {
 
         assertThat(restart().find(job.getId()).orElseThrow().isPinned()).isFalse();
     }
+
+    @Test
+    void aJobDeletedAsItFinishesIsNotWrittenBack() {
+        Job job = job(1, clock.instant());
+        repository.save(job);
+        job.setStatus(JobStatus.DONE);
+        job.setFinishedAt(clock.instant());
+
+        // the user deletes it between its DONE and the last save of the queue
+        repository.delete(job.getId());
+        repository.save(job);
+
+        assertThat(repository.find(job.getId())).isEmpty();
+        assertThat(files.record(job.getId())).doesNotExist();
+        assertThat(restart().find(job.getId())).isEmpty();
+    }
 }

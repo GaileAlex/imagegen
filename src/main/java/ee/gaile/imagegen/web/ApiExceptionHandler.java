@@ -4,8 +4,9 @@ import ee.gaile.imagegen.idea.IdeaUnavailableException;
 import ee.gaile.imagegen.image.ThumbnailFailedException;
 import ee.gaile.imagegen.web.dto.ErrorBody;
 import ee.gaile.imagegen.service.ComfyUnavailableException;
-import ee.gaile.imagegen.service.InvalidParamsException;
+import ee.gaile.imagegen.job.InvalidParamsException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.util.unit.DataSize;
 
 /**
  * The error bodies of docs/CONTRACT.md: {"error": code, "message": text}.
@@ -22,6 +24,14 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 @Slf4j
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    private final String uploadLimits;
+
+    public ApiExceptionHandler(@Value("${spring.servlet.multipart.max-file-size:1MB}") DataSize maxFile,
+                               @Value("${spring.servlet.multipart.max-request-size:10MB}") DataSize maxRequest) {
+        this.uploadLimits = "A file is larger than " + maxFile.toMegabytes() + " MB, or all of them than "
+                + maxRequest.toMegabytes() + " MB";
+    }
 
     @ExceptionHandler(InvalidParamsException.class)
     public ResponseEntity<ErrorBody> invalidParams(InvalidParamsException e) {
@@ -50,7 +60,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorBody> tooLarge(MaxUploadSizeExceededException e) {
-        return body(HttpStatus.BAD_REQUEST, "invalid_params", "A file is larger than 20 MB");
+        return body(HttpStatus.BAD_REQUEST, "invalid_params", uploadLimits);
     }
 
     @ExceptionHandler(ComfyUnavailableException.class)

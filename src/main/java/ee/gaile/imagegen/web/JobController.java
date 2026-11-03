@@ -4,7 +4,6 @@ import ee.gaile.imagegen.web.dto.JobView;
 import ee.gaile.imagegen.web.dto.SubmitResponse;
 import ee.gaile.imagegen.config.ImagegenProperties;
 import ee.gaile.imagegen.image.Thumbnails;
-import ee.gaile.imagegen.service.InvalidParamsException;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.job.JobKind;
@@ -33,8 +32,6 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.ZoneOffset;
@@ -71,7 +68,8 @@ public class JobController {
                                                  @RequestPart("request") String request,
                                                  @RequestPart(value = "image", required = false) MultipartFile image,
                                                  @RequestPart(value = "mask", required = false) MultipartFile mask) {
-        JobService.Accepted accepted = service.submit(userId, userName, request, bytes(image), bytes(mask));
+        JobService.Accepted accepted = service.submit(userId, userName, request, Uploads.bytes(image),
+                Uploads.bytes(mask));
         Job job = accepted.job();
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(new SubmitResponse(job.getId(), job.getStatus(), accepted.position(), job.getSeed()));
@@ -179,16 +177,5 @@ public class JobController {
 
     private JobView view(Job job) {
         return JobView.of(job, job.getStatus().isFinished() ? -1 : queue.position(job), properties.retention());
-    }
-
-    private byte[] bytes(MultipartFile file) {
-        if (file == null) {
-            return null;
-        }
-        try {
-            return file.getBytes();
-        } catch (IOException e) {
-            throw new InvalidParamsException("The upload could not be read");
-        }
     }
 }

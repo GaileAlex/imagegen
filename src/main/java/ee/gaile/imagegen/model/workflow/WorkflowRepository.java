@@ -50,10 +50,24 @@ public class WorkflowRepository {
                 throw new IllegalStateException("Workflow " + id + " has no decoded node " + decoded);
             }
             return new WorkflowTemplate(id, graph, output, params,
-                    anchor.isEmpty() ? null : FaceAnchor.valueOf(anchor), decoded.isEmpty() ? null : decoded);
+                    anchor.isEmpty() ? null : FaceAnchor.valueOf(anchor), decoded.isEmpty() ? null : decoded,
+                    video(id, description.get("video")));
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot read the workflow " + id, e);
         }
+    }
+
+    private static VideoProfile video(String id, JsonNode video) {
+        if (video == null || video.isNull()) {
+            return null;
+        }
+        VideoProfile profile = new VideoProfile(video.path("fps").asInt(0), video.path("width").asInt(0),
+                video.path("height").asInt(0), video.path("halfStages").asBoolean(false),
+                video.path("tailFrames").asInt(0));
+        if (profile.fps() <= 0 || profile.width() <= 0 || profile.height() <= 0 || profile.tailFrames() <= 0) {
+            throw new IllegalStateException("Workflow " + id + ": \"video\" needs fps, width, height and tailFrames");
+        }
+        return profile;
     }
 
     private JsonNode read(String path) throws IOException {

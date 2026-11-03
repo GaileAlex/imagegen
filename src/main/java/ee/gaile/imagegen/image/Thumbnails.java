@@ -11,7 +11,6 @@ import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
-import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,7 +36,7 @@ public class Thumbnails {
 
     /**
      * The thumbnail of a finished job, made now if it is not there yet. One at a time: the first visit of a long
-     * history asks for dozens at once, and each video starts an ffmpeg.
+     * history asks for dozens at once, and each video is decoded in memory.
      *
      * @throws ThumbnailFailedException the result could not be read
      */
@@ -89,21 +88,11 @@ public class Thumbnails {
 
     /** The shorter side down to {@link #SIDE}, a smaller picture keeps its size; opaque, a JPEG has no alpha */
     static BufferedImage scaled(BufferedImage picture) {
-        BufferedImage opaque = picture.getColorModel().hasAlpha() ? onWhite(picture) : picture;
+        BufferedImage opaque = picture.getColorModel().hasAlpha() ? InputImages.flatten(picture, Color.WHITE)
+                : picture;
         double scale = Math.min(1.0, (double) SIDE / Math.min(opaque.getWidth(), opaque.getHeight()));
         return InputImages.scale(opaque, Math.max(1, (int) Math.round(opaque.getWidth() * scale)),
                 Math.max(1, (int) Math.round(opaque.getHeight() * scale)));
-    }
-
-    private static BufferedImage onWhite(BufferedImage picture) {
-        BufferedImage rgb = new BufferedImage(picture.getWidth(), picture.getHeight(), BufferedImage.TYPE_INT_RGB);
-        Graphics2D graphics = rgb.createGraphics();
-        try {
-            graphics.drawImage(picture, 0, 0, Color.WHITE, null);
-        } finally {
-            graphics.dispose();
-        }
-        return rgb;
     }
 
     private static void writeJpeg(BufferedImage picture, Path target) throws IOException {

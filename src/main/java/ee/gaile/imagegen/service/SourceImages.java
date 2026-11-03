@@ -1,6 +1,7 @@
 package ee.gaile.imagegen.service;
 
 import ee.gaile.imagegen.image.InputImages;
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobFailedException;
 import ee.gaile.imagegen.job.JobKind;

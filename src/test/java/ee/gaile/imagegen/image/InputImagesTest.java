@@ -1,6 +1,6 @@
 package ee.gaile.imagegen.image;
 
-import ee.gaile.imagegen.service.InvalidParamsException;
+import ee.gaile.imagegen.job.InvalidParamsException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

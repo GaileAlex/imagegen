@@ -1,5 +1,6 @@
 package ee.gaile.imagegen.service;
 
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.model.config.VideoPromptStyle;
 import lombok.experimental.UtilityClass;
@@ -9,7 +10,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * The prompt of a long video with its scenes written out: every scene starts with a mark line "[Scene 2 · 10 s · LTX]"
@@ -79,7 +79,7 @@ public class ScenePrompts {
             parts.add("[Scene " + (i + 1) + " · " + scenes.get(i).seconds() + " s · " + named + "]\n"
                     + scenes.get(i).prompt());
         }
-        return parts.stream().collect(Collectors.joining("\n\n"));
+        return String.join("\n\n", parts);
     }
 
     /**

@@ -16,11 +16,6 @@ import java.time.Instant;
  */
 public record Deadline(Instant at, Duration stall, Instant since, GpuHolds holds) {
 
-    /** Without holds */
-    public Deadline(Instant at, Duration stall) {
-        this(at, stall, Instant.MIN, GpuHolds.NONE);
-    }
-
     public boolean passed(Instant now) {
         return !now.isBefore(at.plus(holds.within(since, now)));
     }

@@ -7,7 +7,6 @@ import ee.gaile.imagegen.model.workflow.ParamSpec;
 import ee.gaile.imagegen.model.workflow.WorkflowRepository;
 import ee.gaile.imagegen.model.workflow.WorkflowTemplate;
 import ee.gaile.imagegen.job.JobKind;
-import ee.gaile.imagegen.service.WorkflowValues;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
@@ -48,7 +47,7 @@ public class ModelCatalogue {
         List<ParamDefinition> params = new ArrayList<>();
         for (ParamConfig param : config.params()) {
             ParamSpec spec = template.params().get(param.name());
-            if (spec == null && !WorkflowValues.CLIENT_ONLY_PARAMS.contains(param.name())) {
+            if (spec == null && !ParamNames.CLIENT_ONLY.contains(param.name())) {
                 throw new IllegalStateException(config.id() + ": param " + param.name() + " is not in its params file");
             }
             params.add(buildParam(config.id(), param, spec));
@@ -61,10 +60,14 @@ public class ModelCatalogue {
         if ((kind == JobKind.VIDEO) != (config.promptStyle() != null)) {
             throw new IllegalStateException(config.id() + ": a prompt style is required for VIDEO and only for it");
         }
-        boolean sound = params.stream().anyMatch(param -> param.name().equals(WorkflowValues.SOUND));
+        boolean sound = params.stream().anyMatch(param -> param.name().equals(ParamNames.SOUND));
         if (sound && (kind != JobKind.VIDEO || template.decodedNode() == null)) {
             throw new IllegalStateException(config.id() + ": only a VIDEO mode with \"decoded\" in its params file "
                     + "can get a sound");
+        }
+        if ((kind == JobKind.VIDEO) != (template.video() != null)) {
+            throw new IllegalStateException(config.id() + ": \"video\" in the params file is required for VIDEO and "
+                    + "only for it");
         }
         if (kind == JobKind.VIDEO) {
             checkLengths(config, template, params);
@@ -89,8 +92,8 @@ public class ModelCatalogue {
             throw new IllegalStateException(config.id() + ": a VIDEO mode needs clip-seconds and a scene-seconds "
                     + "no longer than it");
         }
-        boolean longer = params.stream().anyMatch(param -> param.name().equals("seconds") && param.max() != null
-                && param.max().intValue() > config.clipSeconds());
+        boolean longer = params.stream().anyMatch(param -> param.name().equals(ParamNames.SECONDS)
+                && param.max() != null && param.max().intValue() > config.clipSeconds());
         if (longer && template.decodedNode() == null) {
             throw new IllegalStateException(config.id() + ": a video longer than a clip needs \"decoded\" in its "
                     + "params file");

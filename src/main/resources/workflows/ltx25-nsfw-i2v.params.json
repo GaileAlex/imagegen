@@ -3,6 +3,8 @@
   "output": "31",
   "decoded": "28",
   "keepFace": "LTX_GUIDES",
+  "video": {"fps": 24, "width": 1216, "height": 704, "halfStages": true, "tailFrames": 17,
+            "note": "frames = fps * seconds + 1 (8n+1); the first stage renders at half size, then x2; the tail (8n+1) starts the next scene"},
   "timing": "1216x704 121 frames: 188 s I2V, 145 s T2V (with the load)",
   "params": {
     "image": {

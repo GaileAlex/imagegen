@@ -1,5 +1,6 @@
 package ee.gaile.imagegen.service;
 
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.job.Scene;
 import ee.gaile.imagegen.model.config.VideoPromptStyle;
 import org.junit.jupiter.api.Test;

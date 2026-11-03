@@ -1,8 +1,8 @@
 package ee.gaile.imagegen.idea;
 
 import ee.gaile.imagegen.job.GpuGuest;
+import ee.gaile.imagegen.ollama.Ollama;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -10,8 +10,6 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.http.HttpClient;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,12 +30,15 @@ class OllamaIdeaWriter implements IdeaWriter, GpuGuest {
     private final ObjectMapper mapper;
     private final RestClient gpuClient;
     private final RestClient cpuClient;
+    /** What the GPU instance has loaded and its unload: also under the lock of the queue, so a short timeout */
+    private final RestClient gpuControl;
 
     OllamaIdeaWriter(IdeaProperties properties, ObjectMapper mapper) {
         this.properties = properties;
         this.mapper = mapper;
-        this.gpuClient = client(properties.gpuUrl(), properties.gpuTimeout());
-        this.cpuClient = client(properties.url(), properties.timeout());
+        this.gpuClient = Ollama.client(properties.gpuUrl(), properties.gpuTimeout());
+        this.cpuClient = Ollama.client(properties.url(), properties.timeout());
+        this.gpuControl = Ollama.client(properties.gpuUrl(), Ollama.CONTROL_TIMEOUT);
     }
 
     @Override
@@ -85,18 +86,15 @@ class OllamaIdeaWriter implements IdeaWriter, GpuGuest {
      */
     @Override
     public void leaveGpu() {
-        if (gpuClient == null) {
+        if (gpuControl == null) {
             return;
         }
         try {
-            JsonNode loaded = gpuClient.get().uri("/api/ps").retrieve().body(JsonNode.class);
+            JsonNode loaded = gpuControl.get().uri("/api/ps").retrieve().body(JsonNode.class);
             boolean present = loaded != null && loaded.path("models").valueStream()
                     .anyMatch(model -> properties.model().equals(model.path("name").asString("")));
             if (present) {
-                gpuClient.post().uri("/api/generate")
-                        .body(Map.of("model", properties.model(), "keep_alive", 0))
-                        .retrieve()
-                        .toBodilessEntity();
+                Ollama.unload(gpuControl, properties.model());
                 log.info("The idea model left the GPU");
             }
         } catch (RestClientException e) {
@@ -124,22 +122,5 @@ class OllamaIdeaWriter implements IdeaWriter, GpuGuest {
             fields.put(name, value);
         }
         return fields;
-    }
-
-    /** null for an empty url: that instance is not used */
-    private static RestClient client(String url, Duration timeout) {
-        if (url == null || url.isBlank()) {
-            return null;
-        }
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
-                .version(HttpClient.Version.HTTP_1_1)
-                .build();
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(timeout);
-        return RestClient.builder()
-                .baseUrl(url)
-                .requestFactory(requestFactory)
-                .build();
     }
 }

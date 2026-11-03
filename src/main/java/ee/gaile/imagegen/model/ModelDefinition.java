@@ -5,6 +5,7 @@ import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.model.config.VideoPromptStyle;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A mode of the catalogue, the element of GET /api/models.
@@ -23,4 +24,9 @@ public record ModelDefinition(String id, JobKind kind, String title, String desc
                               List<ParamDefinition> params,
                               @JsonInclude(JsonInclude.Include.NON_NULL) VideoPromptStyle promptStyle,
                               @JsonInclude(JsonInclude.Include.NON_NULL) Integer sceneSeconds) {
+
+    /** The client param of this name, empty when the mode has none */
+    public Optional<ParamDefinition> param(String name) {
+        return params.stream().filter(param -> param.name().equals(name)).findFirst();
+    }
 }

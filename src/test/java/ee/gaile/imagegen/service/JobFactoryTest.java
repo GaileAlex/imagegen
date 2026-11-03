@@ -1,9 +1,11 @@
 package ee.gaile.imagegen.service;
 
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobKind;
 import ee.gaile.imagegen.job.MutableClock;
 import ee.gaile.imagegen.job.Scene;
+import ee.gaile.imagegen.model.ParamNames;
 import ee.gaile.imagegen.model.TestCatalogue;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +23,7 @@ class JobFactoryTest {
 
     private Job create(String model, Map<String, Object> params) {
         return factory.create(UUID.randomUUID(), 7, "alex", TestCatalogue.model(model), params,
-                new Dimension(1168, 880));
+                new Dimension(1168, 880), TestCatalogue.model(model).acceptsImage());
     }
 
     private Map<String, Object> params(Object... keyValues) {
@@ -58,7 +60,7 @@ class JobFactoryTest {
         JobFactory real = new JobFactory(new MutableClock());
         for (int i = 0; i < 200; i++) {
             long seed = real.create(UUID.randomUUID(), 1, null, TestCatalogue.model("muse-txt2img"),
-                    params("prompt", "x"), null).getSeed();
+                    params("prompt", "x"), null, false).getSeed();
             assertThat(seed).isBetween(0L, 2147483647L);
         }
     }
@@ -116,8 +118,8 @@ class JobFactoryTest {
                 params("prompt", "x"), null, false);
         Job fromImage = create("ltx25-nsfw-i2v", params("prompt", "x"));
 
-        assertThat(textOnly.getParams()).containsEntry(JobFactory.TEXT_ONLY, true);
-        assertThat(fromImage.getParams()).doesNotContainKey(JobFactory.TEXT_ONLY);
+        assertThat(textOnly.getParams()).containsEntry(ParamNames.TEXT_ONLY, true);
+        assertThat(fromImage.getParams()).doesNotContainKey(ParamNames.TEXT_ONLY);
     }
 
     @Test
@@ -149,7 +151,7 @@ class JobFactoryTest {
 
     @Test
     void theClientCannotSetTextOnly() {
-        assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", JobFactory.TEXT_ONLY, true)))
+        assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", ParamNames.TEXT_ONLY, true)))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Unknown param");
     }
 
@@ -216,7 +218,7 @@ class JobFactoryTest {
     @Test
     void anEditWithoutAPhotoSizeIsRefused() {
         assertThatThrownBy(() -> factory.create(UUID.randomUUID(), 1, "a", TestCatalogue.model("muse-edit"),
-                params("prompt", "x"), null)).isInstanceOf(InvalidParamsException.class);
+                params("prompt", "x"), null, true)).isInstanceOf(InvalidParamsException.class);
     }
 
     @Test

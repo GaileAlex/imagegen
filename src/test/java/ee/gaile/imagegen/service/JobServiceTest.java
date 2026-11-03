@@ -1,5 +1,6 @@
 package ee.gaile.imagegen.service;
 
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.gpu.UnloadPolicy;
 import ee.gaile.imagegen.job.ComfyGateway;
 import ee.gaile.imagegen.job.Job;
@@ -9,6 +10,7 @@ import ee.gaile.imagegen.job.JobQueue;
 import ee.gaile.imagegen.job.JobResult;
 import ee.gaile.imagegen.job.JobStatus;
 import ee.gaile.imagegen.job.MutableClock;
+import ee.gaile.imagegen.model.ParamNames;
 import ee.gaile.imagegen.model.TestCatalogue;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.storage.JobStore;
@@ -188,7 +190,7 @@ class JobServiceTest {
     void ltxRunsFromTheTextAloneButWanNeedsAnImage() {
         Job job = service.submit(1, "a", request("ltx25-nsfw-i2v", "{\"prompt\":\"walks\"}"), null, null).job();
 
-        assertThat(job.getParams()).containsEntry(JobFactory.TEXT_ONLY, true);
+        assertThat(job.getParams()).containsEntry(ParamNames.TEXT_ONLY, true);
         assertThat(files.input(job.getId())).doesNotExist();
         assertThatThrownBy(() -> service.submit(1, "a", request("wan22-i2v-fastmove", "{\"prompt\":\"walks\"}"),
                 new byte[0], null)).isInstanceOf(InvalidParamsException.class).hasMessageContaining("image");

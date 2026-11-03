@@ -11,7 +11,8 @@ public interface PromptTranslator {
 
     /**
      * @param texts param name -> text, each with Cyrillic in it
-     * @return param name -> English text, for every given param
+     * @return param name -> English text, for every given param; empty when no translation model is set (the texts go
+     * to the models as typed)
      * @throws JobFailedException when the translation model fails or answers nothing
      */
     Map<String, String> translate(Map<String, String> texts);
@@ -26,11 +27,15 @@ public interface PromptTranslator {
     static Map<String, String> cyrillicTexts(Map<String, Object> params) {
         Map<String, String> texts = new LinkedHashMap<>();
         params.forEach((name, value) -> {
-            if (value instanceof String text && text.codePoints()
-                    .anyMatch(c -> Character.UnicodeScript.of(c) == Character.UnicodeScript.CYRILLIC)) {
+            if (value instanceof String text && hasCyrillic(text)) {
                 texts.put(name, text);
             }
         });
         return texts;
+    }
+
+    static boolean hasCyrillic(String text) {
+        return text != null && text.codePoints()
+                .anyMatch(c -> Character.UnicodeScript.of(c) == Character.UnicodeScript.CYRILLIC);
     }
 }

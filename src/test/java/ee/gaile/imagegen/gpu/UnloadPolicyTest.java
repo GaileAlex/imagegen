@@ -2,10 +2,10 @@ package ee.gaile.imagegen.gpu;
 
 import ee.gaile.imagegen.gpu.UnloadPolicy.UnloadState;
 import ee.gaile.imagegen.job.FakeGateway;
-import ee.gaile.imagegen.job.FakeTranslator;
 import ee.gaile.imagegen.job.GpuHolds;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.job.JobQueue;
+import ee.gaile.imagegen.job.TestQueues;
 import ee.gaile.imagegen.job.JobStatus;
 import ee.gaile.imagegen.job.MutableClock;
 import org.junit.jupiter.api.AfterEach;
@@ -13,7 +13,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.List;
 
 import static ee.gaile.imagegen.job.JobQueueTest.PROPERTIES;
 import static ee.gaile.imagegen.job.JobQueueTest.job;
@@ -29,10 +28,7 @@ class UnloadPolicyTest {
 
     @BeforeEach
     void setUp() {
-        queue = new JobQueue(gateway, new FakeTranslator(), job -> {
-        }, job -> {
-        }, PROPERTIES, clock, () -> {
-        }, job -> List.of(), new GpuHolds(clock));
+        queue = TestQueues.plain(gateway, clock, new GpuHolds(clock));
         queue.start();
         policy = new UnloadPolicy(queue, PROPERTIES, clock);
     }

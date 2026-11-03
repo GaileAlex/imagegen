@@ -54,6 +54,8 @@ public class Job {
     private volatile int scenesDone;
     /** Failed tries of the current step of a long video: the first failure is tried again */
     private volatile int stepFailures;
+    /** Not stored: the record and the files are gone, a late save of the queue must not write them back */
+    private volatile boolean deleted;
 
     public Job(UUID id, long userId, String userName, String model, JobKind kind, Map<String, Object> params,
                long seed, Instant createdAt) {

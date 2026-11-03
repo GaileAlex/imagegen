@@ -3,10 +3,12 @@ package ee.gaile.imagegen.comfy;
 import lombok.experimental.UtilityClass;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
-import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.regex.Pattern;
+
+import static ee.gaile.imagegen.comfy.Graphs.link;
+import static ee.gaile.imagegen.comfy.Graphs.node;
 
 /**
  * The sound of a soundless video (Wan): MMAudio (ComfyUI-MMAudio of kijai, patched by comfyui-service/
@@ -34,8 +36,6 @@ class SoundGraphs {
     private static final double ANY_LENGTH = 600.0;
     private static final Pattern SCENE_MARK = Pattern.compile("(?m)^\\s*\\[[^\\]\\n]*\\]\\s*$");
 
-    private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
-
     /**
      * Adds the sound to the graph of a clip: the decoded frames go to MMAudio, its sound to the video node.
      *
@@ -60,10 +60,10 @@ class SoundGraphs {
      * @param join the graph of {@link SceneGraphs#join}
      */
     static void addToJoin(ObjectNode join, String prompt, long seed) {
-        ObjectNode parts = join.putObject(JOINED_PARTS).put("class_type", "GetVideoComponents").putObject("inputs");
-        parts.set("video", link("300", 0));
+        ObjectNode parts = node(join, JOINED_PARTS, "GetVideoComponents");
+        parts.set("video", link(SceneGraphs.JOIN, 0));
         addSampler(join, link(JOINED_PARTS, 0), link(JOINED_PARTS, 2), prompt, seed);
-        ObjectNode create = join.putObject(JOINED_WITH_SOUND).put("class_type", "CreateVideo").putObject("inputs");
+        ObjectNode create = node(join, JOINED_WITH_SOUND, "CreateVideo");
         create.set("images", link(JOINED_PARTS, 0));
         create.set("fps", link(JOINED_PARTS, 2));
         create.set("audio", link(SAMPLER, 0));
@@ -84,17 +84,16 @@ class SoundGraphs {
     }
 
     private static void addSampler(ObjectNode graph, ArrayNode images, JsonNode fps, String prompt, long seed) {
-        ObjectNode model = graph.putObject(MODEL).put("class_type", "MMAudioModelLoader").putObject("inputs");
+        ObjectNode model = node(graph, MODEL, "MMAudioModelLoader");
         model.put("mmaudio_model", MODEL_FILE);
         model.put("base_precision", "fp16");
-        ObjectNode features = graph.putObject(FEATURES).put("class_type", "MMAudioFeatureUtilsLoader")
-                .putObject("inputs");
+        ObjectNode features = node(graph, FEATURES, "MMAudioFeatureUtilsLoader");
         features.put("vae_model", "mmaudio_vae_44k_fp16.safetensors");
         features.put("synchformer_model", "mmaudio_synchformer_fp16.safetensors");
         features.put("clip_model", "apple_DFN5B-CLIP-ViT-H-14-384_fp16.safetensors");
         features.put("mode", "44k");
         features.put("precision", "fp16");
-        ObjectNode sampler = graph.putObject(SAMPLER).put("class_type", "MMAudioSampler").putObject("inputs");
+        ObjectNode sampler = node(graph, SAMPLER, "MMAudioSampler");
         sampler.set("mmaudio_model", link(MODEL, 0));
         sampler.set("feature_utils", link(FEATURES, 0));
         sampler.put("duration", ANY_LENGTH);
@@ -108,9 +107,5 @@ class SoundGraphs {
         sampler.put("force_offload", true);
         sampler.set("images", images);
         sampler.set("fps", fps);
-    }
-
-    private static ArrayNode link(String node, int output) {
-        return NODES.arrayNode().add(node).add(output);
     }
 }

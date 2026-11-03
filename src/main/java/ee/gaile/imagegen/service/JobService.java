@@ -1,6 +1,7 @@
 package ee.gaile.imagegen.service;
 
 import ee.gaile.imagegen.job.ComfyGateway;
+import ee.gaile.imagegen.job.InvalidParamsException;
 import ee.gaile.imagegen.job.Job;
 import ee.gaile.imagegen.storage.JobFiles;
 import ee.gaile.imagegen.job.JobKind;
@@ -16,6 +17,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.awt.Dimension;
 import java.awt.image.BufferedImage;
 import java.io.UncheckedIOException;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -41,11 +43,14 @@ public class JobService {
      * @param mask        the uploaded mask, null when there is none
      */
     public Accepted submit(long userId, String userName, String requestJson, byte[] image, byte[] mask) {
-        JobRequest request = parse(requestJson);
+        JobRequest request = RequestParts.read(mapper, requestJson, JobRequest.class);
+        if (request == null || request.model() == null) {
+            throw new InvalidParamsException("The request has no model");
+        }
         ModelDefinition model = catalogue.find(request.model())
                 .orElseThrow(() -> new InvalidParamsException("Unknown model: " + request.model()));
         // Refused before the (slow) decoding of the photo
-        factory.validate(model, request.params());
+        Map<String, Object> params = factory.validate(model, request.params());
         if (!gateway.isUp()) {
             throw new ComfyUnavailableException("ComfyUI does not answer");
         }
@@ -76,8 +81,7 @@ public class JobService {
             }
             maskPicture = InputImages.mask(mask, picture.getWidth(), picture.getHeight());
         }
-        Job job = factory.create(id, userId, userName, model, request.params(), size,
-                picture != null || pendingSource);
+        Job job = factory.build(id, userId, userName, model, params, size, picture != null || pendingSource);
         if (pendingSource) {
             job.setSourceJobId(source.getId());
         }
@@ -118,24 +122,6 @@ public class JobService {
         } catch (UncheckedIOException e) {
             files.deleteAll(id);
             throw e;
-        }
-    }
-
-    private JobRequest parse(String json) {
-        if (json == null || json.isBlank()) {
-            throw new InvalidParamsException("The request part is missing");
-        }
-        try {
-            JobRequest request = mapper.readValue(json, JobRequest.class);
-            if (request == null || request.model() == null) {
-                throw new InvalidParamsException("The request has no model");
-            }
-            return request;
-        } catch (RuntimeException e) {
-            if (e instanceof InvalidParamsException invalid) {
-                throw invalid;
-            }
-            throw new InvalidParamsException("The request is not valid JSON of the expected shape");
         }
     }
 

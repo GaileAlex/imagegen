@@ -2,15 +2,13 @@ package ee.gaile.imagegen.translate;
 
 import ee.gaile.imagegen.job.JobFailedException;
 import ee.gaile.imagegen.job.PromptTranslator;
+import ee.gaile.imagegen.ollama.Ollama;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.JsonNode;
 
-import java.net.http.HttpClient;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,11 +28,14 @@ public class OllamaTranslator implements PromptTranslator {
             If a part of the text is already English, keep it as it is.""";
 
     private final TranslatorProperties properties;
+    /** null when no url is set: the texts go to ComfyUI as typed */
     private final RestClient client;
+    private final RestClient control;
 
     public OllamaTranslator(TranslatorProperties properties) {
         this.properties = properties;
-        this.client = enabled(properties) ? client(properties) : null;
+        this.client = Ollama.client(properties.url(), properties.timeout());
+        this.control = Ollama.client(properties.url(), Ollama.CONTROL_TIMEOUT);
     }
 
     @Override
@@ -49,14 +50,11 @@ public class OllamaTranslator implements PromptTranslator {
 
     @Override
     public void unload() {
-        if (client == null) {
+        if (control == null) {
             return;
         }
         try {
-            client.post().uri("/api/generate")
-                    .body(Map.of("model", properties.model(), "keep_alive", 0))
-                    .retrieve()
-                    .toBodilessEntity();
+            Ollama.unload(control, properties.model());
         } catch (RestClientException e) {
             log.warn("Could not unload the translation model: {}", e.getMessage());
         }
@@ -95,22 +93,5 @@ public class OllamaTranslator implements PromptTranslator {
             text = text.substring(1, text.length() - 1).strip();
         }
         return text;
-    }
-
-    private static boolean enabled(TranslatorProperties properties) {
-        return properties.url() != null && !properties.url().isBlank();
-    }
-
-    private static RestClient client(TranslatorProperties properties) {
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
-                .version(HttpClient.Version.HTTP_1_1)
-                .build();
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(properties.timeout());
-        return RestClient.builder()
-                .baseUrl(properties.url())
-                .requestFactory(requestFactory)
-                .build();
     }
 }

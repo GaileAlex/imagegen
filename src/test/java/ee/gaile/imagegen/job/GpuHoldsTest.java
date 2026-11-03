@@ -84,7 +84,7 @@ class GpuHoldsTest {
     @Test
     void aDeadlineWithoutHoldsIsTheFixedTime() {
         Instant at = clock.instant();
-        Deadline deadline = new Deadline(at, Duration.ofSeconds(5));
+        Deadline deadline = Deadlines.withoutHolds(at, Duration.ofSeconds(5));
 
         assertThat(deadline.passed(at.minusMillis(1))).isFalse();
         assertThat(deadline.passed(at)).isTrue();
