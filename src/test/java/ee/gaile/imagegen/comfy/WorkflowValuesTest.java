@@ -70,22 +70,42 @@ class WorkflowValuesTest {
         Map<String, Object> portrait = of(job("wan22-i2v-fastmove", JobKind.VIDEO,
                 "seconds", 2, "orientation", "portrait"));
 
-        assertThat(landscape).containsEntry("frames", 81).containsEntry("width", 832).containsEntry("height", 480)
+        // 720p: the author of the weights, "if the face changes, increase the resolution"
+        assertThat(landscape).containsEntry("frames", 81).containsEntry("width", 1280).containsEntry("height", 720)
                 .doesNotContainKeys("halfWidth", "halfHeight");
-        assertThat(portrait).containsEntry("frames", 33).containsEntry("width", 480).containsEntry("height", 832);
+        assertThat(portrait).containsEntry("frames", 33).containsEntry("width", 720).containsEntry("height", 1280);
     }
 
     @Test
-    void ltxSecondsBecomeFramesAt24FpsWithHalfSizeFirstStage() {
+    void aWanSceneBySviKeepsTheStartImageAsItsAnchorAndSharesFiveFramesWithTheSceneBefore() {
+        Job job = job("wan22-i2v-fastmove", JobKind.VIDEO, "prompt", "the whole story", "seconds", 10,
+                "orientation", "portrait", "keepFace", true);
+        job.setScenes(List.of(new Scene(5, "he walks", null), new Scene(5, "he sits", null)));
+        var svi = WORKFLOWS.get(WORKFLOWS.get("wan22-i2v-fastmove").sceneWorkflow());
+
+        Map<String, Object> first = WorkflowValues.scene(job, svi, 1);
+        Map<String, Object> second = WorkflowValues.scene(job, svi, 2);
+
+        assertThat(svi.latentChain()).isNotNull();
+        assertThat(first).containsEntry("frames", 81).containsEntry("width", 544).containsEntry("height", 960)
+                .containsEntry("image", "3f0c0000-0000-0000-0000-000000000001.input.png")
+                .containsEntry("keepFace", false).containsEntry("seed", 5L);
+        assertThat(second).containsEntry("frames", 85).containsEntry("prompt", "he sits")
+                .containsEntry("image", "3f0c0000-0000-0000-0000-000000000001.input.png")
+                .containsEntry("seed", 6L);
+    }
+
+    @Test
+    void ltxSecondsBecomeFramesAt24FpsAtTheFinalSize() {
         Map<String, Object> landscape = of(job("ltx25-nsfw-i2v", JobKind.VIDEO,
                 "seconds", 5, "orientation", "landscape"));
         Map<String, Object> portrait = of(job("ltx25-nsfw-i2v", JobKind.VIDEO,
                 "seconds", 8, "orientation", "portrait"));
 
+        // one stage at the final size (the author of the weights), no half-size first stage
         assertThat(landscape).containsEntry("frames", 121).containsEntry("width", 1216).containsEntry("height", 704)
-                .containsEntry("halfWidth", 608).containsEntry("halfHeight", 352);
-        assertThat(portrait).containsEntry("frames", 193).containsEntry("width", 704).containsEntry("height", 1216)
-                .containsEntry("halfWidth", 352).containsEntry("halfHeight", 608);
+                .doesNotContainKeys("halfWidth", "halfHeight");
+        assertThat(portrait).containsEntry("frames", 193).containsEntry("width", 704).containsEntry("height", 1216);
     }
 
     @Test
@@ -101,12 +121,12 @@ class WorkflowValuesTest {
     }
 
     @Test
-    void halfSizesAreMultiplesOf32() {
+    void ltxSizesAreMultiplesOf32() {
         for (String orientation : new String[]{"landscape", "portrait"}) {
             Map<String, Object> values = of(job("ltx25-nsfw-i2v", JobKind.VIDEO, "seconds", 5,
                     "orientation", orientation));
-            assertThat((Integer) values.get("halfWidth") % 32).isZero();
-            assertThat((Integer) values.get("halfHeight") % 32).isZero();
+            assertThat((Integer) values.get("width") % 32).isZero();
+            assertThat((Integer) values.get("height") % 32).isZero();
         }
     }
 
@@ -122,7 +142,7 @@ class WorkflowValuesTest {
         assertThat(first).containsEntry("prompt", "he plays").containsEntry("frames", 241)
                 .containsEntry("image", "3f0c0000-0000-0000-0000-000000000001.input.png")
                 .containsEntry(ParamNames.TEXT_ONLY, true).containsEntry("keepFace", false)
-                .containsEntry("seed", 5L).containsEntry("halfWidth", 352)
+                .containsEntry("seed", 5L).containsEntry("width", 704)
                 .containsEntry("filenamePrefix", "3f0c0000-0000-0000-0000-000000000001-scene1");
         // the 17 frames of the tail, then 10 s more; the English text of a Russian scene
         assertThat(second).containsEntry("prompt", "he stands up").containsEntry("frames", 257)

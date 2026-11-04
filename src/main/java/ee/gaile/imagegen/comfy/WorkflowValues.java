@@ -36,10 +36,6 @@ class WorkflowValues {
             values.put("width", size[0]);
             values.put("height", size[1]);
             values.put("frames", video.fps() * seconds(job) + 1);
-            if (video.halfStages()) {
-                values.put("halfWidth", size[0] / 2);
-                values.put("halfHeight", size[1] / 2);
-            }
         }
         return values;
     }
@@ -48,8 +44,11 @@ class WorkflowValues {
      * The values of one scene of a long video: its prompt, its length, its own seed; the first scene starts from the
      * start image of the job (or the text alone), the next ones from the tail of the scene before. The face anchor is
      * off: it would pull every scene back to the start image. No sound either: the join makes one for all the scenes.
+     * A scene of a latent chain (SVI) keeps the start image in every scene, as its anchor: the scene before reaches it
+     * as a latent, not as frames.
      *
-     * @param scene 1-based
+     * @param template the workflow the scenes are made with
+     * @param scene    1-based
      */
     static Map<String, Object> scene(Job job, WorkflowTemplate template, int scene) {
         Map<String, Object> values = of(job, template);
@@ -65,8 +64,10 @@ class WorkflowValues {
             values.put("frames", frames + 1);
         } else {
             values.put("frames", video.tailFrames() + frames);
-            values.put("image", JobFiles.tailName(job.getId()));
-            values.put(ParamNames.TEXT_ONLY, false);
+            if (template.latentChain() == null) {
+                values.put("image", JobFiles.tailName(job.getId()));
+                values.put(ParamNames.TEXT_ONLY, false);
+            }
         }
         return values;
     }

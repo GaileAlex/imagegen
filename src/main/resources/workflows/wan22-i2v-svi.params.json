@@ -1,0 +1,66 @@
+{
+  "description": "A scene of a long Wan video by SVI 2.0 Pro (Stable Video Infinity), the recipe of the author of the Wan weights (his workflow \"SVI 2or3 ksampler\", Civitai 2079192): the nolightning SVI Consistent Face models, Lightning lightx2v and the SVI Pro LoRA at 1.0, shift 8, per scene 7 steps in three samplers - step 0-1 the high model with the SVI LoRA only at CFG 3 (more motion; CFG 4 flickered red, 2026-11-04), 1-4 high + Lightning, 4-7 low + Lightning (CFG 1). The start image is the anchor (latent frame 0) of EVERY scene, the last latent of the scene before (latentChain) its motion: the colours never go through pixels between the scenes and the face is checked against the photo in each one. Bench 2026-11-04 (test-results/video-quality/p4-svi-cf): no drift of colour or contrast over 20 s, the face 0.68-0.76, ~8 min a scene.",
+  "output": "25",
+  "decoded": "23",
+  "latentChain": {"load": "18", "into": "19", "save": "26",
+                  "note": "load: LoadLatent of the latent of the scene before; into: its WanImageToVideoSVIPro (prev_samples, motion_latent_count); save: SaveLatent of the sampled latent for the next scene. Scene 1 has no latent before: the load node and prev_samples go, motion_latent_count 0"},
+  "video": {"fps": 16, "width": 960, "height": 544, "tailFrames": 5,
+            "note": "the author: the area of 720x720 (FindPerfectResolution); tailFrames = the overlap: a scene after the first starts with 5 frames of the end of the one before (anchor frame + motion latent) and the join blends them (ImageBatchExtendWithOverlap, linear_blend, as Kijai's SVI Pro example); frames = 5 + fps * seconds, 4n+1"},
+  "timing": "960x544 81 frames: ~480 s a scene with the models loaded (RTX 5060 Ti 16 GB, 2026-11-04)",
+  "params": {
+    "image": {
+      "targets": [
+        "11.image"
+      ],
+      "default": "start.png",
+      "note": "the start image of the job in every scene: the anchor"
+    },
+    "prompt": {
+      "targets": [
+        "15.text"
+      ],
+      "default": "",
+      "note": "the scene: its first moment (the state at the end of the scene before), then the motion, timestamped"
+    },
+    "negativePrompt": {
+      "targets": [
+        "14.text"
+      ],
+      "default": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+      "note": "stock Chinese negative; it works only in the first sampler (CFG 3)"
+    },
+    "seed": {
+      "targets": [
+        "20.noise_seed"
+      ],
+      "default": 0,
+      "note": "a seed of its own for every scene (SVI: \"very important\")"
+    },
+    "width": {
+      "targets": [
+        "12.width"
+      ],
+      "default": 960
+    },
+    "height": {
+      "targets": [
+        "12.height"
+      ],
+      "default": 544
+    },
+    "frames": {
+      "targets": [
+        "19.length"
+      ],
+      "default": 81,
+      "note": "16 fps, 4n+1"
+    },
+    "filenamePrefix": {
+      "targets": [
+        "25.filename_prefix",
+        "26.filename_prefix"
+      ],
+      "default": "wan-svi"
+    }
+  }
+}

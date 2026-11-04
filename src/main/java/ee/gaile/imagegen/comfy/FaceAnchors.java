@@ -51,32 +51,20 @@ class FaceAnchors {
     }
 
     /**
-     * The guide frames go between the first-frame conditioning and the sampler on both stages; each stage gets its
-     * own guider with the guided conditioning, and the guides are cropped off the latent after the sampler.
+     * The guide frames go between the first-frame conditioning and the sampler; the sampler gets the guided
+     * conditioning, and the guides are cropped off the latent after it. One stage at the final size (the graph of
+     * the author of the LTX weights).
      */
     private static void ltxGuides(ObjectNode graph, int frames, int fps) {
         List<Integer> guides = ltxGuideFrames(frames, fps);
         int[] next = {FIRST_NEW_NODE};
-
-        // stage 1: half size latent of node 12, sampled by node 19 into node 20, upscaled by node 21
-        ArrayNode[] stage1 = addGuides(graph, guides, next, link("10", 0), link("10", 1), link("12", 0));
-        input(graph, "14").set("video_latent", stage1[2]);
-        input(graph, "15").set("positive", stage1[0]);
-        input(graph, "15").set("negative", stage1[1]);
-        String crop1 = cropGuides(graph, next, stage1, link("20", 0));
-        input(graph, "21").set("samples", link(crop1, 2));
-
-        // stage 2: full size latent of node 22, sampled by node 26 with guider 15 so far, decoded by node 28
-        ArrayNode[] stage2 = addGuides(graph, guides, next, link(crop1, 0), link(crop1, 1), link("22", 0));
-        input(graph, "23").set("video_latent", stage2[2]);
-        String guider = id(next);
-        ObjectNode guiderNode = (ObjectNode) graph.get("15").deepCopy();
-        ((ObjectNode) guiderNode.get("inputs")).set("positive", stage2[0]);
-        ((ObjectNode) guiderNode.get("inputs")).set("negative", stage2[1]);
-        graph.set(guider, guiderNode);
-        input(graph, "26").set("guider", link(guider, 0));
-        String crop2 = cropGuides(graph, next, stage2, link("27", 0));
-        input(graph, "28").set("samples", link(crop2, 2));
+        // the latent of node 12 (the start image in place), sampled by node 15, split by node 16, decoded by node 17
+        ArrayNode[] guided = addGuides(graph, guides, next, link("10", 0), link("10", 1), link("12", 0));
+        input(graph, "14").set("video_latent", guided[2]);
+        input(graph, "15").set("positive", guided[0]);
+        input(graph, "15").set("negative", guided[1]);
+        String crop = cropGuides(graph, next, guided, link("16", 0));
+        input(graph, "17").set("samples", link(crop, 2));
     }
 
     /**
@@ -104,7 +92,7 @@ class FaceAnchors {
             inputs.set("negative", links[1]);
             inputs.set("vae", link("3", 0));
             inputs.set("latent", links[2]);
-            inputs.set("image", link("7", 0));
+            inputs.set("image", link("6", 0));
             inputs.put("frame_idx", frame);
             inputs.put("strength", LTX_GUIDE_STRENGTH);
             links = new ArrayNode[]{link(id, 0), link(id, 1), link(id, 2)};

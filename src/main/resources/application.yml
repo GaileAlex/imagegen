@@ -80,7 +80,8 @@ imagegen:
       kind: IMAGE
       title: Muse 4 (Krea 2)
       description: Best for people. Keeps the age and the details of the prompt, natural poses, correct hands; uncensored. The slowest one; 8-20 steps, CFG 1-2.5 (above 3 the image breaks).
-      typical-seconds: 50
+      # about 2 MP by default since 2026-11-04 (the authors' size), 1856x1072 ~95 s
+      typical-seconds: 100
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT, default: '' }
@@ -93,7 +94,7 @@ imagegen:
       kind: IMAGE
       title: Krea2 Realism (fast)
       description: Fast. Landscapes, streets, signs with text, food, animals as good as Muse, five times quicker; people come out younger than asked; uncensored.
-      typical-seconds: 12
+      typical-seconds: 20
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: steps, type: INT, min: 4, max: 16 }
@@ -104,7 +105,7 @@ imagegen:
       kind: IMAGE
       title: CyberRealistic (Z-Image)
       description: A real photo look. The most natural skin, candid "phone photo" scenes, lively city streets and animals; follows the prompt more loosely, poses are sometimes odd; uncensored.
-      typical-seconds: 15
+      typical-seconds: 30
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: steps, type: INT, min: 6, max: 16 }
@@ -115,7 +116,7 @@ imagegen:
       kind: IMAGE
       title: Moody (Krea 2)
       description: Young faces, often with an Asian look, soft glamour light; fast. Makes people younger than asked; uncensored.
-      typical-seconds: 15
+      typical-seconds: 30
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: steps, type: INT, min: 6, max: 16 }
@@ -145,16 +146,17 @@ imagegen:
     - id: wan22-i2v-fastmove
       kind: VIDEO
       title: Wan 2.2 Fast Move
-      description: Video from a start image, lively motion; the sound is added from the picture by another model (noises, no speech). The face of a real person may drift. 832x480 (16 fps).
-      # +~25 s for the sound (MMAudio, 2026-11-02)
-      typical-seconds: 185
+      description: Video from a start image, lively motion; the sound is added from the picture by another model (noises, no speech). 1280x720 (16 fps); a long video is made scene by scene by SVI at 960x544, every scene checked against the start image, so the colours and the face hold.
+      # 720p 2+3 steps ~700 s at the old 48G RAM limit + ~25 s for the sound (MMAudio); a long video ~8 min a scene
+      typical-seconds: 720
       prompt-style: WAN
       clip-seconds: 6
       scene-seconds: 5
       params:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
-        # a chain of Wan scenes blurs and shifts its colours from ~17 s on (test 2026-10-29); LTX holds 30 s
+        # the old chain of Wan scenes blurred and shifted its colours from ~17 s on (2026-10-29); SVI held 20 s
+        # without a drift (2026-11-04, task 6), a longer video is not tested yet
         - { name: seconds, type: INT, default: '5', min: 2, max: 20 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
         - { name: keepFace, type: BOOL, default: 'false' }
@@ -165,7 +167,8 @@ imagegen:
       kind: VIDEO
       title: LTX 2.5 NSFW
       description: LTX 2.5 with NSFW fine-tunes merged in, also fine for scenes without nudity. Sound, 1216x704 (24 fps); from a text or a start image.
-      typical-seconds: 150
+      # the settings of the author of the weights: CFG 3 = two passes a step, ~2x the old 150 s (2026-11-04)
+      typical-seconds: 280
       prompt-style: LTX
       clip-seconds: 12
       # 10 s plus the 17 frames it starts from stay below a plain 12 s clip in the VRAM

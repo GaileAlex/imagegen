@@ -1,11 +1,11 @@
 {
-  "description": "LTX-2.5 uncensored v1.1 Q4_K_M GGUF (ChrisColeTech on Hugging Face: Eros10 NSFW, DMD distill, IC and I2V LoRAs merged in) in the graph of the plain LTX 2.5 (ltx25-i2v, removed 2026-10-29); 8 steps, CFG 1 as its author recommends. Compared 2026-10-26 in test-results/nsfw-cmp: the best prompt following on nude scenes, the stock LTX blurs and dodges them",
-  "output": "31",
-  "decoded": "28",
+  "description": "LTX-2.5 uncensored v1.1 Q8_0 GGUF (ChrisColeTech on Hugging Face: Eros10 NSFW, DMD distill, IC and I2V LoRAs merged in) with the settings of its author (his ltx25_i2v_simple.json and the model card): ONE stage at the final size, KSampler euler / simple 8 steps, CFG 3 with the general part of his negative (at CFG 1 a negative does nothing), the start image straight into LTXVImgToVideoInplace without LTXVPreprocess. Task 6 (2026-11-04, test-results/video-quality/p1-author-q8): the face held better than in our old half-size + x2 graph at CFG 1; his own fp8_scaled weights, text encoder and VAE gave nothing more than Q8_0 and our files (the user: \"Q8 maybe even better\"). Q8_0 needs comfyui-service/patch_gguf.py (its learnable_registers are quantized). 2026-10-26 test-results/nsfw-cmp: the best prompt following on nude scenes",
+  "output": "20",
+  "decoded": "17",
   "keepFace": "LTX_GUIDES",
-  "video": {"fps": 24, "width": 1216, "height": 704, "halfStages": true, "tailFrames": 17,
-            "note": "frames = fps * seconds + 1 (8n+1); the first stage renders at half size, then x2; the tail (8n+1) starts the next scene"},
-  "timing": "1216x704 121 frames: 188 s I2V, 145 s T2V (with the load)",
+  "video": {"fps": 24, "width": 1216, "height": 704, "tailFrames": 17,
+            "note": "frames = fps * seconds + 1 (8n+1); the tail (8n+1) starts the next scene"},
+  "timing": "1216x704 121 frames: ~270 s with the load (2026-11-04, CFG 3 = two passes a step; the old graph at CFG 1 ~140 s)",
   "params": {
     "image": {
       "targets": [
@@ -15,43 +15,43 @@
     },
     "textOnly": {
       "targets": [
-        "12.bypass",
-        "22.bypass"
+        "12.bypass"
       ],
       "default": false,
-      "note": "set by the service when no start image is given: both image nodes pass the latent through (text to video)"
+      "note": "set by the service when no start image is given: the image node passes the latent through (text to video)"
     },
     "prompt": {
       "targets": [
         "8.text"
       ],
       "default": "",
-      "note": "motion, camera and sound (\"a soft meow\", ambience)"
+      "note": "[VISUAL]: / [SPEECH]: / [SOUNDS]: of the IC-LoRA baked in; \"Unscored.\" when there is no music"
     },
     "negativePrompt": {
       "targets": [
         "9.text"
       ],
-      "default": "pc game, console game, video game, cartoon, childish, ugly"
+      "default": "blurry, out of focus, overexposed, underexposed, low contrast, washed out colors, excessive noise, grainy texture, poor lighting, flickering, motion blur, distorted proportions, unnatural skin tones, deformed facial features, asymmetrical face, missing facial features, extra limbs, disfigured hands, wrong hand count, inconsistent perspective, camera shake, background clutter, harsh shadows, inconsistent lighting direction, color banding, cartoonish rendering, 3D CGI look, unrealistic materials, uncanny valley effect, mismatched lip sync, distorted voice, robotic voice, off-sync audio, jittery movement, unnatural transitions, cinematic oversaturation, stylized filters, AI artifacts",
+      "note": "the general part of the negative of the I2V example of the author (the parts about his own clip left out)"
     },
     "seed": {
       "targets": [
-        "16.noise_seed"
+        "15.seed"
       ],
       "default": 0
     },
-    "halfWidth": {
+    "width": {
       "targets": [
         "11.width"
       ],
-      "default": 608,
-      "note": "stage 1 size = half of the final, multiple of 32 (final 1216x704)"
+      "default": 1216,
+      "note": "the card: 1280x720 at most"
     },
-    "halfHeight": {
+    "height": {
       "targets": [
         "11.height"
       ],
-      "default": 352
+      "default": 704
     },
     "frames": {
       "targets": [
@@ -63,7 +63,7 @@
     },
     "filenamePrefix": {
       "targets": [
-        "31.filename_prefix"
+        "20.filename_prefix"
       ],
       "default": "ltx"
     }

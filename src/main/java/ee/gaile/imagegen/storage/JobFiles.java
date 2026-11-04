@@ -80,6 +80,11 @@ public class JobFiles {
         return directory.resolve(tailName(id));
     }
 
+    /** The sampled latent of the latest scene of a long video made by a latent chain (SVI): the next one goes on from it */
+    public Path latent(UUID id) {
+        return directory.resolve(latentName(id));
+    }
+
     /*
      * The names of the files that go to ComfyUI as they are: the workflow names them in its inputs, so they are the
      * same here and in its input folder.
@@ -101,10 +106,16 @@ public class JobFiles {
         return id + ".tail.png";
     }
 
+    /** LoadLatent lists the files of the input folder that end with ".latent" */
+    public static String latentName(UUID id) {
+        return id + ".tail.latent";
+    }
+
     /** The scenes and the tail of a long video: no use once joined, failed or cancelled */
     public void deleteScenes(UUID id) {
         delete(id + ".scene*.mp4");
         delete(tailName(id));
+        delete(latentName(id));
     }
 
     /** The record and every file of the job */

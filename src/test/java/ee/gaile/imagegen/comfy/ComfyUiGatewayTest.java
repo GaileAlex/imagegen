@@ -132,7 +132,7 @@ class ComfyUiGatewayTest {
     }
 
     @Test
-    void ltxGetsFramesAndHalfSizeInTheirNodes() {
+    void ltxGetsFramesAndTheFinalSizeInOneStage() {
         Job job = job("ltx25-nsfw-i2v", params("prompt", "walks", "seconds", 2, "orientation", "portrait", "seed", 1),
                 null);
         var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
@@ -141,12 +141,18 @@ class ComfyUiGatewayTest {
 
         assertThat(graph.at("/11/inputs/length").asInt()).isEqualTo(49);
         assertThat(graph.at("/13/inputs/frames_number").asInt()).isEqualTo(49);
-        assertThat(graph.at("/11/inputs/width").asInt()).isEqualTo(352);
-        assertThat(graph.at("/11/inputs/height").asInt()).isEqualTo(608);
+        assertThat(graph.at("/11/inputs/width").asInt()).isEqualTo(704);
+        assertThat(graph.at("/11/inputs/height").asInt()).isEqualTo(1216);
         assertThat(graph.at("/6/inputs/image").asString()).isEqualTo(job.getId() + ".input.png");
-        assertThat(graph.at("/31/inputs/filename_prefix").asString()).isEqualTo(job.getId().toString());
+        // the start image straight in, no LTXVPreprocess
+        assertThat(graph.at("/12/inputs/image").toString()).isEqualTo("[\"6\",0]");
+        assertThat(graph.at("/20/inputs/filename_prefix").asString()).isEqualTo(job.getId().toString());
         assertThat(graph.at("/12/inputs/bypass").asBoolean()).isFalse();
-        assertThat(graph.at("/22/inputs/bypass").asBoolean()).isFalse();
+        // the settings of the author of the weights: euler / simple, 8 steps, CFG 3 with his negative
+        assertThat(graph.at("/15/inputs/seed").asLong()).isEqualTo(1);
+        assertThat(graph.at("/15/inputs/steps").asInt()).isEqualTo(8);
+        assertThat(graph.at("/15/inputs/cfg").asDouble()).isEqualTo(3.0);
+        assertThat(graph.at("/9/inputs/text").asString()).startsWith("blurry, out of focus");
     }
 
     @Test
@@ -206,36 +212,32 @@ class ComfyUiGatewayTest {
         String longText = "word ".repeat(200);
         assertThat(SoundGraphs.prompt(longText)).hasSizeLessThanOrEqualTo(SoundGraphs.MAX_PROMPT).endsWith("word");
         assertThat(SoundGraphs.prompt(null)).isEmpty();
+        // the times of the moments of a Wan prompt are no sound
+        assertThat(SoundGraphs.prompt("(At 0 seconds: a cat sits.) (At 1 second: it jumps.)"))
+                .isEqualTo("a cat sits. it jumps.");
     }
 
     @Test
-    void ltxKeepsTheFaceWithGuideFramesOnBothStages() {
+    void ltxKeepsTheFaceWithGuideFrames() {
         var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
         Job job = job("ltx25-nsfw-i2v", params("prompt", "walks", "seconds", 8, "keepFace", true), null);
 
         ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(job, template));
 
-        // stage 1: 100-102 guide the half size latent at frames 64, 128 and the last, 103 crops them off
+        // 100-102 guide the latent with the start image at frames 64, 128 and the last, 103 crops them off
         assertThat(graph.at("/100/inputs/latent").toString()).isEqualTo("[\"12\",0]");
         assertThat(graph.at("/100/inputs/positive").toString()).isEqualTo("[\"10\",0]");
+        assertThat(graph.at("/100/inputs/image").toString()).isEqualTo("[\"6\",0]");
         assertThat(graph.at("/100/inputs/frame_idx").asInt()).isEqualTo(64);
         assertThat(graph.at("/101/inputs/frame_idx").asInt()).isEqualTo(128);
         assertThat(graph.at("/102/inputs/frame_idx").asInt()).isEqualTo(-1);
         assertThat(graph.at("/14/inputs/video_latent").toString()).isEqualTo("[\"102\",2]");
         assertThat(graph.at("/15/inputs/positive").toString()).isEqualTo("[\"102\",0]");
+        assertThat(graph.at("/15/inputs/negative").toString()).isEqualTo("[\"102\",1]");
         assertThat(graph.at("/103/class_type").asString()).isEqualTo("LTXVCropGuides");
-        assertThat(graph.at("/103/inputs/latent").toString()).isEqualTo("[\"20\",0]");
-        assertThat(graph.at("/21/inputs/samples").toString()).isEqualTo("[\"103\",2]");
-        // stage 2: 104-106 guide the full size latent, 107 is its own guider, 108 crops before decoding
-        assertThat(graph.at("/104/inputs/positive").toString()).isEqualTo("[\"103\",0]");
-        assertThat(graph.at("/104/inputs/latent").toString()).isEqualTo("[\"22\",0]");
-        assertThat(graph.at("/23/inputs/video_latent").toString()).isEqualTo("[\"106\",2]");
-        assertThat(graph.at("/107/class_type").asString()).isEqualTo("LTXVDualCFGGuider");
-        assertThat(graph.at("/107/inputs/positive").toString()).isEqualTo("[\"106\",0]");
-        assertThat(graph.at("/26/inputs/guider").toString()).isEqualTo("[\"107\",0]");
-        assertThat(graph.at("/108/inputs/latent").toString()).isEqualTo("[\"27\",0]");
-        assertThat(graph.at("/28/inputs/samples").toString()).isEqualTo("[\"108\",2]");
-        assertThat(graph.has("109")).isFalse();
+        assertThat(graph.at("/103/inputs/latent").toString()).isEqualTo("[\"16\",0]");
+        assertThat(graph.at("/17/inputs/samples").toString()).isEqualTo("[\"103\",2]");
+        assertThat(graph.has("104")).isFalse();
     }
 
     @Test
@@ -248,7 +250,7 @@ class ComfyUiGatewayTest {
 
         assertThat(job.getParams()).containsEntry("keepFace", true);
         assertThat(graph.has("100")).isFalse();
-        assertThat(graph.at("/28/inputs/samples").toString()).isEqualTo("[\"27\",0]");
+        assertThat(graph.at("/17/inputs/samples").toString()).isEqualTo("[\"16\",0]");
     }
 
     @Test
@@ -260,7 +262,6 @@ class ComfyUiGatewayTest {
                 .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE + "/prompt"))
                 .andExpect(jsonPath("$.prompt['12'].inputs.bypass").value(true))
-                .andExpect(jsonPath("$.prompt['22'].inputs.bypass").value(true))
                 .andExpect(jsonPath("$.prompt['6'].inputs.image").value(job.getId() + ".input.png"))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON)
                         .body("{\"error\":{\"message\":\"stop here\"}}"));
@@ -361,7 +362,11 @@ class ComfyUiGatewayTest {
         server.expect(requestTo(BASE + "/upload/image")).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE + "/prompt"))
                 .andExpect(jsonPath("$.prompt['12'].inputs.length").value(33))
-                .andExpect(jsonPath("$.prompt['12'].inputs.width").value(480))
+                .andExpect(jsonPath("$.prompt['12'].inputs.width").value(720))
+                // the steps of the author of the weights: 2 + 3
+                .andExpect(jsonPath("$.prompt['13'].inputs.steps").value(5))
+                .andExpect(jsonPath("$.prompt['13'].inputs.end_at_step").value(2))
+                .andExpect(jsonPath("$.prompt['14'].inputs.start_at_step").value(2))
                 .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
         String done = HISTORY_DONE.formatted("17",
                 "{\"images\":[{\"filename\":\"wan_00001.mp4\",\"subfolder\":\"video\",\"type\":\"output\"}],"
@@ -374,7 +379,7 @@ class ComfyUiGatewayTest {
 
         JobResult result = gateway.run(job, sink, later());
 
-        assertThat(result).isEqualTo(new JobResult("video/mp4", 8, 480, 832, 2.0));
+        assertThat(result).isEqualTo(new JobResult("video/mp4", 8, 720, 1280, 2.0));
         assertThat(files.result(job.getId(), "video/mp4")).exists();
     }
 
@@ -605,7 +610,7 @@ class ComfyUiGatewayTest {
                 .andExpect(jsonPath("$.prompt['8'].inputs.text").value("he stands up"))
                 // 17 frames of the tail + 10 s at 24 fps, the seed of the second scene
                 .andExpect(jsonPath("$.prompt['11'].inputs.length").value(257))
-                .andExpect(jsonPath("$.prompt['16'].inputs.noise_seed").value(6))
+                .andExpect(jsonPath("$.prompt['15'].inputs.seed").value(6))
                 .andExpect(jsonPath("$.prompt['12'].inputs.bypass").value(false))
                 .andExpect(jsonPath("$.prompt['190'].class_type").value("ImageFromBatch"))
                 .andExpect(jsonPath("$.prompt['190'].inputs.batch_index").value(-17))
@@ -613,7 +618,7 @@ class ComfyUiGatewayTest {
                 .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
         String done = """
                 {"p1": {"status": {"status_str": "success", "completed": true, "messages": []},
-                        "outputs": {"31": {"images": [{"filename": "s.mp4", "subfolder": "", "type": "output"}]},
+                        "outputs": {"20": {"images": [{"filename": "s.mp4", "subfolder": "", "type": "output"}]},
                                     "191": {"images": [{"filename": "t.png", "subfolder": "", "type": "output"}]}}}}""";
         server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
@@ -665,6 +670,140 @@ class ComfyUiGatewayTest {
         assertThat(List.of(result.width(), result.height())).containsExactly(704, 1216);
         assertThat(files.scene(job.getId(), 1)).doesNotExist();
         assertThat(files.tail(job.getId())).doesNotExist();
+        server.verify();
+    }
+
+    private Job longWanVideo() {
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "seed", 3), null);
+        job.setScenes(List.of(new Scene(5, "he walks", null), new Scene(5, "he sits", null)));
+        return job;
+    }
+
+    @Test
+    void theFirstWanSceneIsMadeBySviFromTheStartImageAloneAndKeepsItsLatent() throws IOException {
+        Job job = longWanVideo();
+        Files.write(files.input(job.getId()), png(8, 8));
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andExpect(content().string(containsString(job.getId() + ".input.png")))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/prompt"))
+                .andExpect(jsonPath("$.prompt['19'].class_type").value("WanImageToVideoSVIPro"))
+                .andExpect(jsonPath("$.prompt['11'].inputs.image").value(job.getId() + ".input.png"))
+                .andExpect(jsonPath("$.prompt['15'].inputs.text").value("he walks"))
+                .andExpect(jsonPath("$.prompt['12'].inputs.width").value(960))
+                .andExpect(jsonPath("$.prompt['12'].inputs.height").value(544))
+                .andExpect(jsonPath("$.prompt['19'].inputs.length").value(81))
+                // no scene before: no latent to load, only the anchor
+                .andExpect(jsonPath("$.prompt['18']").doesNotExist())
+                .andExpect(jsonPath("$.prompt['19'].inputs.prev_samples").doesNotExist())
+                .andExpect(jsonPath("$.prompt['19'].inputs.motion_latent_count").value(0))
+                .andExpect(jsonPath("$.prompt['20'].inputs.noise_seed").value(3))
+                .andExpect(jsonPath("$.prompt['20'].inputs.cfg").value(3.0))
+                .andExpect(jsonPath("$.prompt['26'].inputs.filename_prefix").value(job.getId() + "-scene1"))
+                // the join gives the whole video one sound; the face is the anchor, no face nodes
+                .andExpect(jsonPath("$.prompt['402']").doesNotExist())
+                .andExpect(jsonPath("$.prompt['100']").doesNotExist())
+                .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
+        String done = """
+                {"p1": {"status": {"status_str": "success", "completed": true, "messages": []},
+                        "outputs": {"25": {"images": [{"filename": "s.mp4", "subfolder": "", "type": "output"}]},
+                                    "26": {"latents": [{"filename": "l.latent", "subfolder": "", "type": "output"}]}}}}""";
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/view?filename=s.mp4")))
+                .andRespond(withSuccess(new byte[]{7, 7}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(containsString("/view?filename=l.latent")))
+                .andRespond(withSuccess(new byte[]{4, 4, 4}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(BASE + "/history")).andRespond(withSuccess());
+
+        gateway.runScene(job, 1, sink, later());
+
+        assertThat(files.scene(job.getId(), 1)).hasBinaryContent(new byte[]{7, 7});
+        assertThat(files.latent(job.getId())).hasBinaryContent(new byte[]{4, 4, 4});
+        server.verify();
+    }
+
+    @Test
+    void aLaterWanSceneHasTheStartImageAsItsAnchorAndTheLatentOfTheSceneBeforeAsItsMotion() throws IOException {
+        Job job = longWanVideo();
+        Files.write(files.input(job.getId()), png(8, 8));
+        Files.write(files.latent(job.getId()), new byte[]{4});
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andExpect(content().string(containsString(job.getId() + ".input.png")))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andExpect(content().string(containsString(job.getId() + ".tail.latent")))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/prompt"))
+                .andExpect(jsonPath("$.prompt['11'].inputs.image").value(job.getId() + ".input.png"))
+                .andExpect(jsonPath("$.prompt['18'].inputs.latent").value(job.getId() + ".tail.latent"))
+                .andExpect(jsonPath("$.prompt['19'].inputs.prev_samples[0]").value("18"))
+                .andExpect(jsonPath("$.prompt['19'].inputs.motion_latent_count").value(1))
+                // the 5 frames it shares with the scene before, then 5 s more; a seed of its own
+                .andExpect(jsonPath("$.prompt['19'].inputs.length").value(85))
+                .andExpect(jsonPath("$.prompt['20'].inputs.noise_seed").value(4))
+                .andExpect(jsonPath("$.prompt['15'].inputs.text").value("he sits"))
+                .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
+        String done = """
+                {"p1": {"status": {"status_str": "success", "completed": true, "messages": []},
+                        "outputs": {"25": {"images": [{"filename": "s.mp4", "subfolder": "", "type": "output"}]},
+                                    "26": {"latents": [{"filename": "l.latent", "subfolder": "", "type": "output"}]}}}}""";
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/view?filename=s.mp4")))
+                .andRespond(withSuccess(new byte[]{8}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(containsString("/view?filename=l.latent")))
+                .andRespond(withSuccess(new byte[]{5, 5}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(BASE + "/history")).andRespond(withSuccess());
+
+        gateway.runScene(job, 2, sink, later());
+
+        assertThat(files.scene(job.getId(), 2)).hasBinaryContent(new byte[]{8});
+        assertThat(files.latent(job.getId())).hasBinaryContent(new byte[]{5, 5});
+        server.verify();
+    }
+
+    @Test
+    void theWanScenesAreJoinedWithABlendOfTheFramesTheyShare() throws IOException {
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "seed", 3, "sound", false),
+                null);
+        job.setScenes(List.of(new Scene(5, "he walks", null), new Scene(5, "he sits", null)));
+        Files.write(files.scene(job.getId(), 1), new byte[]{1});
+        Files.write(files.scene(job.getId(), 2), new byte[]{2});
+        Files.write(files.latent(job.getId()), new byte[]{3});
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/prompt"))
+                .andExpect(jsonPath("$.prompt['101'].inputs.file").value(job.getId() + ".scene2.mp4"))
+                .andExpect(jsonPath("$.prompt['201'].class_type").value("GetVideoComponents"))
+                .andExpect(jsonPath("$.prompt['601'].class_type").value("ImageBatchExtendWithOverlap"))
+                .andExpect(jsonPath("$.prompt['601'].inputs.source_images[0]").value("200"))
+                .andExpect(jsonPath("$.prompt['601'].inputs.new_images[0]").value("201"))
+                .andExpect(jsonPath("$.prompt['601'].inputs.overlap").value(5))
+                .andExpect(jsonPath("$.prompt['601'].inputs.overlap_mode").value("linear_blend"))
+                .andExpect(jsonPath("$.prompt['300'].class_type").value("CreateVideo"))
+                .andExpect(jsonPath("$.prompt['300'].inputs.images[0]").value("601"))
+                .andExpect(jsonPath("$.prompt['300'].inputs.images[1]").value(2))
+                .andExpect(jsonPath("$.prompt['300'].inputs.fps").value(16.0))
+                .andExpect(jsonPath("$.prompt['301'].inputs.video[0]").value("300"))
+                .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
+        String done = HISTORY_DONE.formatted("301",
+                "{\"images\":[{\"filename\":\"j.mp4\",\"subfolder\":\"\",\"type\":\"output\"}]}");
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/view?filename=j.mp4")))
+                .andRespond(withSuccess(new byte[]{5, 5}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(BASE + "/history")).andRespond(withSuccess());
+
+        JobResult result = gateway.joinScenes(job, sink, later());
+
+        // the size of the scenes, not of a single clip
+        assertThat(List.of(result.width(), result.height())).containsExactly(960, 544);
+        assertThat(result.durationSeconds()).isEqualTo(10.0);
+        assertThat(files.scene(job.getId(), 2)).doesNotExist();
+        assertThat(files.latent(job.getId())).doesNotExist();
         server.verify();
     }
 

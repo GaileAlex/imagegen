@@ -47,7 +47,7 @@ class ModelCatalogueTest {
     void museDefaultsComeFromTheParamsFile() {
         assertThat(param("muse-txt2img", "steps").defaultValue()).isEqualTo(16);
         assertThat(param("muse-txt2img", "cfg").defaultValue()).isEqualTo(2.0);
-        assertThat(param("muse-txt2img", "width").defaultValue()).isEqualTo(1024);
+        assertThat(param("muse-txt2img", "width").defaultValue()).isEqualTo(1408);
         assertThat(param("muse-edit", "steps").defaultValue()).isEqualTo(10);
         assertThat(param("muse-edit", "cfg").defaultValue()).isEqualTo(1.0);
     }
