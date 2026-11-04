@@ -205,9 +205,13 @@ public class ComfyUiGateway implements ComfyGateway {
      * the scene and the frames go next to the job record, the frames over those of the scene before.
      */
     private void makeScene(Job job, int scene, Consumer<Progress> progress, Deadline deadline) throws IOException {
-        WorkflowTemplate template = workflows.get(job.getModel());
+        WorkflowTemplate template = sceneTemplate(job);
         if (template.decodedNode() == null) {
             throw new IllegalStateException("Workflow " + template.id() + " cannot make scenes");
+        }
+        if (template.latentChain() != null) {
+            makeChainedScene(job, template, scene, progress, deadline);
+            return;
         }
         Map<String, Object> values = WorkflowValues.scene(job, template, scene);
         ObjectNode graph = buildWorkflow(template, values);
@@ -231,11 +235,44 @@ public class ComfyUiGateway implements ComfyGateway {
     }
 
     /**
+     * A scene of a latent chain (SVI): the start image of the job is the anchor of every scene and the latent of the
+     * scene before its motion; the scene and its latent go next to the job record, the latent over that of the scene
+     * before.
+     */
+    private void makeChainedScene(Job job, WorkflowTemplate template, int scene, Consumer<Progress> progress,
+                                  Deadline deadline) throws IOException {
+        Map<String, Object> values = WorkflowValues.scene(job, template, scene);
+        ObjectNode graph = buildWorkflow(template, values);
+        String previous = scene == 1 ? null : JobFiles.latentName(job.getId());
+        SceneGraphs.chainLatent(graph, template.latentChain(), previous);
+        uploadInputs(job);
+        if (previous != null) {
+            comfy.upload(new FileSystemResource(files.latent(job.getId())));
+        }
+        try {
+            Ran ran = execute(job, graph, template.outputNode(), progress, deadline);
+            fetch(firstFile(ran.outputs().path(template.outputNode())), files.scene(job.getId(), scene));
+            fetch(firstFile(ran.outputs().path(template.latentChain().save())), files.latent(job.getId()));
+            comfy.forget(ran.promptId());
+            log.info("Job {}: scene {} of {} made", job.getId(), scene, job.getScenes().size());
+        } finally {
+            deleteInputs(job);
+            comfyFiles.delete("input", "", JobFiles.latentName(job.getId()));
+        }
+    }
+
+    /** The workflow the scenes of the long video of the job are made with: "scenes" of its workflow, or that one */
+    private WorkflowTemplate sceneTemplate(Job job) {
+        WorkflowTemplate template = workflows.get(job.getModel());
+        return template.sceneWorkflow() != null ? workflows.get(template.sceneWorkflow()) : template;
+    }
+
+    /**
      * All the scenes of a long video joined into the result of the job, with one sound for all of them when the job
      * asks for it (the scenes are made without); the scene files go afterwards
      */
     private JobResult join(Job job, Consumer<Progress> progress, Deadline deadline) throws IOException {
-        WorkflowTemplate template = workflows.get(job.getModel());
+        WorkflowTemplate template = sceneTemplate(job);
         int count = job.getScenes().size();
         List<String> names = new ArrayList<>(count);
         try {
@@ -243,8 +280,14 @@ public class ComfyUiGateway implements ComfyGateway {
                 comfy.upload(new FileSystemResource(files.scene(job.getId(), scene)));
                 names.add(JobFiles.sceneName(job.getId(), scene));
             }
-            double repeated = (double) template.video().tailFrames() / template.video().fps();
-            ObjectNode graph = SceneGraphs.join(names, repeated, job.getId().toString());
+            ObjectNode graph;
+            if (template.latentChain() != null) {
+                graph = SceneGraphs.joinBlended(names, template.video().tailFrames(), template.video().fps(),
+                        job.getId().toString());
+            } else {
+                double repeated = (double) template.video().tailFrames() / template.video().fps();
+                graph = SceneGraphs.join(names, repeated, job.getId().toString());
+            }
             if (Boolean.TRUE.equals(job.getParams().get(ParamNames.SOUND))) {
                 String story = job.getScenes().stream().map(Scene::modelPrompt).filter(Objects::nonNull)
                         .collect(Collectors.joining(" "));

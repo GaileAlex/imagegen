@@ -27,18 +27,20 @@ and the catalogue in `application.yml` (`imagegen.models`):
 
 | id                   | kind    | input         | output     | typical time (RTX 5060 Ti, warm) |
 |----------------------|---------|---------------|------------|----------------------------------|
-| `muse-txt2img`       | IMAGE   | -             | image/png  | 1024x1024 16 steps ~50 s         |
-| `krea2-realism-txt2img` | IMAGE   | -             | image/png  | 1024x1024 6 steps ~12 s          |
-| `cyberrealistic-txt2img` | IMAGE   | -             | image/png  | 1024x1024 9 steps ~15 s          |
-| `moody-txt2img`      | IMAGE   | -             | image/png  | 1024x1024 8 steps ~15 s          |
+| `muse-txt2img`       | IMAGE   | -             | image/png  | 1408x1408 16 steps ~100 s        |
+| `krea2-realism-txt2img` | IMAGE   | -             | image/png  | 1408x1408 6 steps ~20 s          |
+| `cyberrealistic-txt2img` | IMAGE   | -             | image/png  | 1408x1408 9 steps ~30 s          |
+| `moody-txt2img`      | IMAGE   | -             | image/png  | 1408x1408 8 steps ~30 s          |
 | `muse-edit`          | EDIT    | image         | image/png  | ~60 s                            |
 | `muse-inpaint`       | INPAINT | image + mask  | image/png  | ~60 s                            |
-| `wan22-i2v-fastmove` | VIDEO   | image         | video/mp4  | 832x480 5 s ~160 s               |
-| `ltx25-nsfw-i2v`     | VIDEO   | image or -    | video/mp4  | 1216x704 5 s with sound ~150 s   |
+| `wan22-i2v-fastmove` | VIDEO   | image         | video/mp4  | 1280x720 5 s ~12 min             |
+| `ltx25-nsfw-i2v`     | VIDEO   | image or -    | video/mp4  | 1216x704 5 s with sound ~4.5 min |
 
 Fast Move and the LTX NSFW merge drift towards their own faces (base Wan 2.2 held a real face best;
-it and the plain LTX 2.5 were removed 2026-10-29). The LTX graph conditions the first frame with strength 1.0 on both stages
-(0.7 on the first stage let the face drift).
+it and the plain LTX 2.5 were removed 2026-10-29). Since 2026-11-04 (task 6) both run with the settings of the authors
+of their weights, quality before time: Wan Fast Move 720p and 2+3 steps, a long Wan video by SVI (see "Long videos");
+LTX Q8_0 in one stage at the final size, KSampler euler / simple 8 steps, CFG 3 with a negative prompt, the start image
+straight in at strength 1.0, prompts in `[VISUAL]: / [SPEECH]: / [SOUNDS]:`.
 
 Response:
 
@@ -58,7 +60,7 @@ Response:
     {"name": "negativePrompt", "type": "TEXT", "default": ""},
     {"name": "steps", "type": "INT", "default": 16, "min": 8, "max": 40},
     {"name": "cfg", "type": "FLOAT", "default": 2.5, "min": 1.0, "max": 4.0, "step": 0.1},
-    {"name": "width", "type": "INT", "default": 1024, "min": 512, "max": 2048, "step": 16},
+    {"name": "width", "type": "INT", "default": 1408, "min": 512, "max": 2048, "step": 16},
     {"name": "height", "type": "INT", "default": 1024, "min": 512, "max": 2048, "step": 16},
     {"name": "seed", "type": "SEED"}
   ]
@@ -68,15 +70,16 @@ Response:
 A VIDEO mode also has `"clipSeconds"` and `"sceneSeconds"` (see "Long videos").
 
 Param types: `TEXT`, `INT`, `FLOAT`, `ENUM` (with `options`), `SEED` (empty = random), `BOOL` (true / false). Only params listed in the
-catalogue are accepted from the client; the rest of `<id>.params.json` (`filenamePrefix`, LTX `halfWidth`, mask blur
+catalogue are accepted from the client; the rest of `<id>.params.json` (`filenamePrefix`, `frames`, mask blur
 ...) is set by the service. Derived values:
 - EDIT / INPAINT: `width`/`height` are not client params; they come from the photo: scaled to at most ~1.05 MP
   (1168x880 for 4:3, 1024x1024 for a square), both sides rounded down to a multiple of 16.
-- VIDEO size is an `orientation` ENUM (`landscape` / `portrait`): Wan 832x480 / 480x832, LTX 1216x704 / 704x1216
-  (the service sets the LTX stage-1 `halfWidth`/`halfHeight`). The frame rate, the size, the half-size first stage
-  and the tail frames of a long video come from `"video"` of `<id>.params.json`, required for a VIDEO mode.
+- VIDEO size is an `orientation` ENUM (`landscape` / `portrait`): Wan 1280x720 / 720x1280 (a long video 960x544 /
+  544x960, the size of its SVI scenes), LTX 1216x704 / 704x1216. The frame rate, the size and the tail frames of a
+  long video come from `"video"` of `<id>.params.json`, required for a VIDEO mode.
 - VIDEO length is a client param in seconds (`seconds`: Wan 2-20, LTX 2-30), converted to frames: 16 * s + 1 for Wan (16 fps),
-  24 * s + 1 for LTX (24 fps); both satisfy the frame rules of the models (4n+1, 8n+1). LTX 10 s ~195 s, 12 s ~255 s.
+  24 * s + 1 for LTX (24 fps); both satisfy the frame rules of the models (4n+1, 8n+1). LTX at CFG 3 takes two passes
+  a step: ~2x the time of the old graph at CFG 1.
   `clipSeconds` of a VIDEO mode (Wan 6, LTX 12) is the longest clip made in one run: a longer video is a long video
   made of scenes of at most `sceneSeconds` (Wan 5, LTX 10), see "Long videos".
 - `needsImage` = the job is refused without an image; `acceptsImage` = an image may be given. LTX has
@@ -87,8 +90,8 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
   back to the start picture) keeps the face of the start image: the image is given to the model again later
   in the clip, so the face does not drift away (`keepFace` of `<id>.params.json` names how, see `FaceAnchor`). Wan:
   the start image is also the last frame (WanFirstLastFrameToVideo). LTX: the start image is a guide frame about every
-  2.7 s and on the last frame, on both stages (LTXVAddGuide at strength 0.5, then LTXVCropGuides); 8 s took 308 s
-  instead of 182 s. Strength 1.0 made a turning head jump back to the photo at every guide, 0.3 let the face drift.
+  2.7 s and on the last frame (LTXVAddGuide at strength 0.5, then LTXVCropGuides); with the old two-stage graph 8 s
+  took 308 s instead of 182 s. Strength 1.0 made a turning head jump back to the photo at every guide, 0.3 let the face drift.
   The person comes back to the pose of the picture there and the motion gets calmer, so it is a bad fit for a scene
   where someone leaves the frame. Ignored for a video from the text alone. LTX 12 s with it once spilled out of the
   16 GB of VRAM (6-10 min at ~50 W instead of ~1.5 min): one of the reasons it is off by default.
@@ -217,12 +220,21 @@ cleanup.
 ## Long videos
 
 A VIDEO job longer than `clipSeconds` of its mode (or with its scenes written out in the prompt) is one continuous
-clip made of scenes: the video model makes one scene at a time, and every scene after the first starts from the
-last frames of the one before (the "tail": LTX 17 frames ~0.7 s, Wan 9 frames ~0.56 s), given as a batch to the start
-image node, so the motion goes on across the seam and not only the pose. The scenes are joined at the end without the
-tail each one repeats. Tests 2026-10-29 (a man with a guitar): no visible seam in 30 s; a scene that ended with the
-man's back to the camera made the next one invent another face, so the storyboard keeps the faces in view at the end
-of a scene.
+clip made of scenes: the video model makes one scene at a time.
+
+- LTX: every scene after the first starts from the last frames of the one before (the "tail": 17 frames ~0.7 s),
+  given as a batch to the start image node, so the motion goes on across the seam and not only the pose. The scenes
+  are joined at the end without the tail each one repeats. Tests 2026-10-29 (a man with a guitar): no visible seam in
+  30 s; a scene that ended with the man's back to the camera made the next one invent another face, so the storyboard
+  keeps the faces in view at the end of a scene.
+- Wan: the scenes are made with another workflow, `"scenes"` of its params file: SVI 2.0 Pro (`wan22-i2v-svi`, the
+  recipe of the author of the Wan weights: the nolightning SVI Consistent Face models, Lightning and SVI LoRAs, shift
+  8, 7 steps in three samplers, the first without Lightning at CFG 3, 960x544). The start image is the anchor of every
+  scene and the sampled latent of the scene before (`SaveLatent` -> `LoadLatent`, `"latentChain"`) its motion: the
+  colours never go through pixels between the scenes and the face is checked against the photo in every scene. A scene
+  after the first shares its first 5 frames with the end of the one before; the join blends them
+  (`ImageBatchExtendWithOverlap`, linear_blend). Test 2026-11-04 (20 s): no drift of colour or contrast, the face held
+  (the old frame tail drifted from ~5 s on).
 
 - The scenes, two ways:
   - written out in `prompt`: every scene starts with a mark line `[Scene 2 · 10 s]` (any separator, Russian
@@ -242,15 +254,17 @@ of a scene.
   `progress.phase` `WAITING`, `position` its place), so it holds the other users up by one scene at most; it stays
   ahead of the later jobs of its own user, which start only after its join. A failed
   step (the storyboard or a scene) is tried once more; a second failure fails the job. The join runs right after the
-  last scene (`JOINING`, ~20 s, ComfyUI core `LoadVideo`, `Video Slice`, `ConcatenateVideo`, sound included; a Wan
-  video with `sound` gets its sound here: `GetVideoComponents` + MMAudio + `CreateVideo`, +~25 s for 20 s).
+  last scene (`JOINING`, ~20 s; LTX: ComfyUI core `LoadVideo`, `Video Slice`, `ConcatenateVideo`, sound included; Wan:
+  `LoadVideo`, `GetVideoComponents`, `ImageBatchExtendWithOverlap`, `CreateVideo`, and with `sound` its sound here:
+  MMAudio over the joined frames, +~25 s for 20 s).
 - `progress.scene` / `progress.scenes`: the scene the phase belongs to and how many (absent for a single clip).
 - The job JSON has `"scenes": [{"seconds": 10, "prompt": "...", "english": "..."}]` (`prompt` absent until the
   storyboard is written, `english` only for a translated scene); absent for a single clip.
-- Time: LTX 30 s ~13 min (scenes of 10 s ~4-4.5 min each), Wan 20 s ~13 min (pieces ~3.2 min each). Wan holds
-  20 s only: in the 30 s test its chain blurred and shifted its colours from ~17 s on (black socks turned green), LTX
-  stayed clean for 30 s.
-- While it runs the scenes and the tail are kept as `<jobId>.scene<N>.mp4` and `<jobId>.tail.png`; they are deleted
+- Time: LTX 30 s ~13 min with the old graph at CFG 1 (scenes of 10 s ~4-4.5 min each; CFG 3 ~2x), Wan 20 s by SVI
+  ~32 min (~8 min a scene). Wan is limited to 20 s: the old chain of frames blurred and shifted its colours from ~17 s
+  on (black socks turned green); SVI held 20 s, longer is not tested yet.
+- While it runs the scenes and the tail are kept as `<jobId>.scene<N>.mp4` and `<jobId>.tail.png` (Wan:
+  `<jobId>.tail.latent`); they are deleted
   after the join, a failure, a cancel, and at the start of the service (a long video does not go on after a restart:
   it becomes FAILED like any pending job).
 

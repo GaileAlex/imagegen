@@ -121,18 +121,27 @@ class IdeaPrompts {
             "videoPrompt": %s
             """;
 
+    // the "dynamic prompts" of the author of the Wan weights (Civitai 2053259): one bracket per second; they followed
+    // the prompt much better than plain sentences (2026-11-04, task 6)
     private static final String WAN = """
-            2-4 short sentences for a %d-second clip without sound, in the order things happen: what the people and \
-            animals do, their gestures and expressions, how the camera moves (static, slow push-in, pan, tracking). \
-            About one action per 2-3 seconds. The looks are already in the picture: name the people briefly ("the \
-            woman in the red coat") so it is clear who is who, without describing the whole picture again.""";
+            the moments of a %d-second clip without sound, one per second from 0 to %d, each in its own brackets \
+            with the second it starts at: "(At 0 seconds: ...) (At 1 second: ...) (At 2 seconds: ...)", each one \
+            short sentence. The first moment names the shot (close-up, medium, wide), where everyone is and how the \
+            camera moves (static, slow push-in, pan, tracking); the next ones tell what the people and animals do, \
+            their gestures and expressions, in the order it happens. The looks are already in the picture: name the \
+            people briefly ("the woman in the red coat") so it is clear who is who, without describing the whole \
+            picture again.""";
 
-    // longer clips get longer prompts: 5 s 110-170 words, 12 s 180-240
+    // longer clips get longer prompts: 5 s 110-170 words, 12 s 180-240. The parts are the prompt template of the
+    // IC-LoRA baked into the LTX weights (ChrisColeTech, the card); with them the face held better (2026-11-04)
     private static final String LTX = """
-            one flowing paragraph of %d-%d words for a %d-second clip with sound, present tense, in the order \
-            things happen: the main action first, then the movements and gestures, the expressions, %sthe \
-            background, the camera (angle, movement), the light, and the sound (ambient noise, music, or speech in \
-            quotes if someone speaks). About one action per 2-3 seconds.""";
+            %d-%d words for a %d-second clip with sound, present tense, in labelled parts, each on its own line: \
+            "[VISUAL]: " one flowing paragraph in the order things happen: the main action first, then the \
+            movements and gestures, the expressions, %sthe background, the camera (angle, movement), the light; \
+            about one action per 2-3 seconds. "[SPEECH]: " only when someone speaks: who says what, the words in \
+            quotes (no such line when nobody speaks). "[SOUNDS]: " the ambient noise and the sounds of the actions, \
+            music only when the idea asks for it; without music the line ends with the word "Unscored." (the video \
+            model ignores "no music").""";
 
     private static final String BARE = """
             The prompts are the bare text for the models: never mention the model, the clip length, the word count \
@@ -208,16 +217,23 @@ class IdeaPrompts {
             the same through the whole video.
             """;
 
+    // SVI: every scene in detail, its first moment the state at the end of the scene before, then the motion, in the
+    // brackets of WAN (the long videos of the bench, 2026-11-04)
     private static final String WAN_SCENE = """
-            3-5 sentences (50-100 words) without sound: where everyone is at the first moment, what they do and \
-            how they move, in order, their gestures and expressions, how the camera moves (static, slow push-in, \
-            pan, tracking).""";
+            the moments of the scene without sound, one per second from 0 to its last second, each in its own \
+            brackets with the second of the scene it starts at: "(At 0 seconds: ...) (At 1 second: ...)", each one \
+            short sentence. "At 0 seconds" is the first moment: the shot, where everyone is and what they do, how \
+            the camera moves (static, slow push-in, pan, tracking); the next ones tell what they do and how they \
+            move, in order, their gestures and expressions.""";
 
     private static final String LTX_SCENE = """
-            one flowing paragraph of 120-220 words with sound, present tense: the first moment, the actions in \
-            order, the movements and gestures, the expressions, the background, the camera (angle, movement), the \
-            light, and the sound: the background of "sound" plus what happens in the scene. Speech in quotes only \
-            if it ends within the scene; no music unless the idea asks for it.""";
+            120-220 words with sound, present tense, in labelled parts, each on its own line: "[VISUAL]: " one \
+            flowing paragraph: the first moment, the actions in order, the movements and gestures, the expressions, \
+            the background, the camera (angle, movement), the light. "[SPEECH]: " only when someone speaks, the \
+            words in quotes and ending within the scene (no such line when nobody speaks). "[SOUNDS]: " the \
+            background of "sound" plus what happens in the scene; no music unless the idea asks for it, and \
+            without music the line ends with the word "Unscored." (the video model ignores "no music" and adds some \
+            anyway).""";
 
     static String system(Start start, VideoPromptStyle style, int seconds, boolean portrait) {
         String video = video(style, seconds, start == Start.TEXT);
@@ -352,7 +368,7 @@ class IdeaPrompts {
     private static String video(VideoPromptStyle style, int seconds, boolean textOnly) {
         return switch (style) {
             // Wan always has a start picture
-            case WAN -> WAN.formatted(seconds);
+            case WAN -> WAN.formatted(seconds, seconds);
             case LTX -> LTX.formatted(60 + 10 * seconds, 120 + 10 * seconds, seconds,
                     textOnly ? "the looks and clothes of the people, " : "");
         };

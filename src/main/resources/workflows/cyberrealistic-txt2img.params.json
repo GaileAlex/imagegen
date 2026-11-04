@@ -1,7 +1,7 @@
 {
-  "description": "CyberRealistic v9 (Z-Image Turbo fine-tune, Q8_0 GGUF) text to image, the Comfy-Org Z-Image Turbo graph; same seed = same picture",
+  "description": "CyberRealistic v10 (Z-Image Turbo fine-tune, bf16, Civitai 2218365 version 3411348; a login is needed to download it) text to image, the Comfy-Org Z-Image Turbo graph; same seed = same picture. Chosen over v9 Q8_0 by the user on 2026-11-04 (test-results/video-quality/pic-v10)",
   "output": "10",
-  "timing": "RTX 5060 Ti: 1248x720 9 steps ~14 s warm",
+  "timing": "RTX 5060 Ti: 1856x1072 9 steps ~28 s with v10 bf16 (v9 Q8_0 ~29 s), 1248x720 ~14 s warm (2026-11-04)",
   "params": {
     "prompt": {
       "targets": [
@@ -26,14 +26,14 @@
       "targets": [
         "7.width"
       ],
-      "default": 1024,
+      "default": 1408,
       "note": "multiple of 16, 1024-2048"
     },
     "height": {
       "targets": [
         "7.height"
       ],
-      "default": 1024
+      "default": 1408
     },
     "filenamePrefix": {
       "targets": [

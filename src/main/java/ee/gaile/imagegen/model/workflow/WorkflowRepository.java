@@ -49,12 +49,28 @@ public class WorkflowRepository {
             if (!decoded.isEmpty() && !graph.has(decoded)) {
                 throw new IllegalStateException("Workflow " + id + " has no decoded node " + decoded);
             }
+            String scenes = description.path("scenes").asString("");
             return new WorkflowTemplate(id, graph, output, params,
                     anchor.isEmpty() ? null : FaceAnchor.valueOf(anchor), decoded.isEmpty() ? null : decoded,
-                    video(id, description.get("video")));
+                    video(id, description.get("video")), scenes.isEmpty() ? null : scenes,
+                    latentChain(id, graph, description.get("latentChain")));
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot read the workflow " + id, e);
         }
+    }
+
+    private static LatentChain latentChain(String id, ObjectNode graph, JsonNode chain) {
+        if (chain == null || chain.isNull()) {
+            return null;
+        }
+        LatentChain nodes = new LatentChain(chain.path("load").asString(""), chain.path("into").asString(""),
+                chain.path("save").asString(""));
+        for (String node : List.of(nodes.load(), nodes.into(), nodes.save())) {
+            if (!graph.has(node)) {
+                throw new IllegalStateException("Workflow " + id + ": \"latentChain\" names no node " + node);
+            }
+        }
+        return nodes;
     }
 
     private static VideoProfile video(String id, JsonNode video) {
@@ -62,8 +78,7 @@ public class WorkflowRepository {
             return null;
         }
         VideoProfile profile = new VideoProfile(video.path("fps").asInt(0), video.path("width").asInt(0),
-                video.path("height").asInt(0), video.path("halfStages").asBoolean(false),
-                video.path("tailFrames").asInt(0));
+                video.path("height").asInt(0), video.path("tailFrames").asInt(0));
         if (profile.fps() <= 0 || profile.width() <= 0 || profile.height() <= 0 || profile.tailFrames() <= 0) {
             throw new IllegalStateException("Workflow " + id + ": \"video\" needs fps, width, height and tailFrames");
         }

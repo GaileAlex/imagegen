@@ -1,7 +1,7 @@
 {
   "description": "moodyKrea2Mix_v80_int8.safetensors (Krea 2) text to image on the Muse graph, CFG 1; same seed = same picture",
   "output": "9",
-  "timing": "RTX 5060 Ti: 1248x720 8 steps ~12 s warm",
+  "timing": "RTX 5060 Ti: 1856x1072 8 steps ~26 s, 1248x720 ~12 s warm (2026-11-04)",
   "params": {
     "prompt": {
       "targets": [
@@ -32,7 +32,7 @@
         "7.width",
         "7.target_width"
       ],
-      "default": 1024,
+      "default": 1408,
       "note": "multiple of 16, 1024-2048"
     },
     "height": {
@@ -43,7 +43,7 @@
         "7.height",
         "7.target_height"
       ],
-      "default": 1024
+      "default": 1408
     },
     "filenamePrefix": {
       "targets": [

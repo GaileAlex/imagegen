@@ -65,6 +65,19 @@ COPY gpu_yield /app/custom_nodes/gpu_yield
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc python3-dev && \
     rm -rf /var/lib/apt/lists/*
 
+# Kijai's nodes (GPL-3.0) for the long videos (docs/tasks/06-video-quality.md): WanImageToVideoSVIPro and
+# ImageBatchExtendWithOverlap chain the Wan clips of SVI 2.0 Pro, ColorMatch, WanVideoNAG; its requirements pinned
+ARG KJNODES_COMMIT=ab72eda7ffad6280422d71ab7d54d3fb87c0ba18
+ADD https://github.com/kijai/ComfyUI-KJNodes/archive/$KJNODES_COMMIT.tar.gz /tmp/kjnodes.tar.gz
+RUN tar -xzf /tmp/kjnodes.tar.gz -C /tmp && mv /tmp/ComfyUI-KJNodes-$KJNODES_COMMIT /app/custom_nodes/ComfyUI-KJNodes && \
+    rm -rf /tmp/kjnodes.tar.gz /app/custom_nodes/ComfyUI-KJNodes/example_workflows /app/custom_nodes/ComfyUI-KJNodes/docs && \
+    pip install --no-cache-dir color-matcher==0.6.0 matplotlib==3.11.2 mss==10.2.0
+
+# The GGUF loader dequantizes the learnable registers of the LTX text connectors (the Q8_0 of LTX-2.5 uncensored
+# quantizes them, patch_gguf.py); here and not next to the clone of ComfyUI-GGUF, so the layers of the pip installs stay
+COPY patch_gguf.py /tmp/patch_gguf.py
+RUN python /tmp/patch_gguf.py /app/custom_nodes/ComfyUI-GGUF && rm /tmp/patch_gguf.py
+
 # The models are a volume (copied once from StabilityMatrix, never a folder of Windows: 9p reads are slow);
 # outputs and inputs are temporary, the Spring app fetches the results over the API
 # (ubuntu:24.04 has its own user "ubuntu" with uid 1000)

@@ -35,6 +35,9 @@ class SoundGraphs {
     /** Longer than any video: the patched sampler takes the length of the frames */
     private static final double ANY_LENGTH = 600.0;
     private static final Pattern SCENE_MARK = Pattern.compile("(?m)^\\s*\\[[^\\]\\n]*\\]\\s*$");
+    /** "(At 2 seconds: she laughs.)" of a Wan prompt: the text stays, the time goes */
+    private static final Pattern MOMENT = Pattern.compile("\\(\\s*at\\s+\\d+(?:\\.\\d+)?\\s+seconds?\\s*:\\s*([^()]*)\\)",
+            Pattern.CASE_INSENSITIVE);
 
     /**
      * Adds the sound to the graph of a clip: the decoded frames go to MMAudio, its sound to the video node.
@@ -71,11 +74,12 @@ class SoundGraphs {
     }
 
     /**
-     * The text MMAudio gets: the video prompt without the scene marks, cut to what its text encoder reads
+     * The text MMAudio gets: the video prompt without the scene marks and the times of its moments, cut to what its
+     * text encoder reads
      */
     static String prompt(String videoPrompt) {
-        String text = SCENE_MARK.matcher(videoPrompt == null ? "" : videoPrompt).replaceAll(" ")
-                .replaceAll("\\s+", " ").strip();
+        String text = SCENE_MARK.matcher(videoPrompt == null ? "" : videoPrompt).replaceAll(" ");
+        text = MOMENT.matcher(text).replaceAll("$1 ").replaceAll("\\s+", " ").strip();
         if (text.length() <= MAX_PROMPT) {
             return text;
         }

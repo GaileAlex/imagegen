@@ -1,11 +1,12 @@
 {
-  "description": "Wan 2.2 Enhanced NSFW Fast Move V2 (Civitai 2053259): Lightning built in, so no LoRA loaders; livelier motion",
+  "description": "Wan 2.2 Enhanced NSFW Fast Move V2 (Civitai 2053259): Lightning built in, so no LoRA loaders; livelier motion. The settings of its author: steps 2+3 (\"Jellai recommends 2+3 ... and I agree\"), 720p (\"the model will not change the face; if it does, increase the resolution\"), euler simple, CFG 1. A long video is made by SVI (\"scenes\")",
   "output": "17",
   "decoded": "15",
   "keepFace": "WAN_LAST_FRAME",
-  "video": {"fps": 16, "width": 832, "height": 480, "halfStages": false, "tailFrames": 9,
-            "note": "frames = fps * seconds + 1 (4n+1); the tail (~0.6 s, 4n+1) starts the next scene of a long video"},
-  "timing": "832x480 81 frames: 157 s with the model load",
+  "scenes": "wan22-i2v-svi",
+  "video": {"fps": 16, "width": 1280, "height": 720, "tailFrames": 9,
+            "note": "frames = fps * seconds + 1 (4n+1); tailFrames only matters for scenes made with this workflow, a long Wan video is made with \"scenes\""},
+  "timing": "1280x720 81 frames 2+3 steps: ~700 s at the 48G RAM limit (2026-11-04, test-results/video-quality/p1w-author); 832x480 2+2 was 157 s",
   "params": {
     "image": {
       "targets": [
@@ -38,14 +39,14 @@
       "targets": [
         "12.width"
       ],
-      "default": 832,
-      "note": "832x480 or 480x832"
+      "default": 1280,
+      "note": "1280x720 or 720x1280"
     },
     "height": {
       "targets": [
         "12.height"
       ],
-      "default": 480
+      "default": 720
     },
     "frames": {
       "targets": [

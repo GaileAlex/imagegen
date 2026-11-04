@@ -34,7 +34,7 @@ class ModelControllerTest {
                 .andExpect(jsonPath("$[0].needsImage").value(false))
                 .andExpect(jsonPath("$[0].needsMask").value(false))
                 .andExpect(jsonPath("$[0].outputType").value("image/png"))
-                .andExpect(jsonPath("$[0].typicalSeconds").value(50))
+                .andExpect(jsonPath("$[0].typicalSeconds").value(100))
                 .andExpect(jsonPath("$[0].params[0].name").value("prompt"))
                 .andExpect(jsonPath("$[0].params[0].type").value("TEXT"))
                 .andExpect(jsonPath("$[0].params[0].required").value(true))

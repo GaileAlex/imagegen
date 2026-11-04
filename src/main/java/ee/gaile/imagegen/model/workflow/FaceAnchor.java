@@ -8,6 +8,6 @@ package ee.gaile.imagegen.model.workflow;
 public enum FaceAnchor {
     /** Wan: the start image is the last frame as well (WanFirstLastFrameToVideo) */
     WAN_LAST_FRAME,
-    /** LTX: the start image is a guide frame every few seconds and at the end, on both stages (LTXVAddGuide) */
+    /** LTX: the start image is a guide frame every few seconds and at the end (LTXVAddGuide) */
     LTX_GUIDES
 }
