@@ -8,3 +8,4 @@ volume:
   loras: loras
   latent_upscale_models: latent_upscale_models
   upscale_models: upscale_models
+  frame_interpolation: frame_interpolation

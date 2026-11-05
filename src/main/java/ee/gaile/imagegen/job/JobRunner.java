@@ -73,8 +73,9 @@ class JobRunner {
         }
         Progress joining = new Progress(Progress.Phase.JOINING, 0, 0).inScene(count, count);
         job.setProgress(joining);
-        // the join has no sampler steps to report
-        return gateway.joinScenes(job, progress -> job.setProgress(joining), deadline);
+        // the join has no sampler steps to report (the sound has some: still the join); the upscale has its frames
+        return gateway.joinScenes(job, progress -> job.setProgress(progress.phase() == Progress.Phase.UPSCALING
+                ? progress.inScene(count, count) : joining), deadline);
     }
 
     private void writeStoryboard(Job job) {

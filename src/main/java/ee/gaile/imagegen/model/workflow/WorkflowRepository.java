@@ -78,9 +78,13 @@ public class WorkflowRepository {
             return null;
         }
         VideoProfile profile = new VideoProfile(video.path("fps").asInt(0), video.path("width").asInt(0),
-                video.path("height").asInt(0), video.path("tailFrames").asInt(0));
+                video.path("height").asInt(0), video.path("tailFrames").asInt(0), video.path("upscaleTo").asInt(0),
+                video.path("smoothBy").asInt(1));
         if (profile.fps() <= 0 || profile.width() <= 0 || profile.height() <= 0 || profile.tailFrames() <= 0) {
             throw new IllegalStateException("Workflow " + id + ": \"video\" needs fps, width, height and tailFrames");
+        }
+        if (profile.upscaleTo() < 0 || profile.smoothBy() < 1) {
+            throw new IllegalStateException("Workflow " + id + ": \"video\" has a bad upscaleTo or smoothBy");
         }
         return profile;
     }

@@ -5,6 +5,8 @@
   "latentChain": {"load": "18", "into": "19", "save": "26",
                   "note": "load: LoadLatent of the latent of the scene before; into: its WanImageToVideoSVIPro (prev_samples, motion_latent_count); save: SaveLatent of the sampled latent for the next scene. Scene 1 has no latent before: the load node and prev_samples go, motion_latent_count 0"},
   "video": {"fps": 16, "width": 960, "height": 544, "tailFrames": 5,
+            "upscaleTo": 1920, "smoothBy": 4,
+            "upscaleNote": "upscale + smooth: the author of the weights - 4x-NMKD-Siax, then RIFE x4 (64 fps); task 6 2026-11-05, on by default",
             "note": "the author: the area of 720x720 (FindPerfectResolution); tailFrames = the overlap: a scene after the first starts with 5 frames of the end of the one before (anchor frame + motion latent) and the join blends them (ImageBatchExtendWithOverlap, linear_blend, as Kijai's SVI Pro example); frames = 5 + fps * seconds, 4n+1"},
   "timing": "960x544 81 frames: ~480 s a scene with the models loaded (RTX 5060 Ti 16 GB, 2026-11-04)",
   "params": {

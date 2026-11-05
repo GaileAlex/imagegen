@@ -146,7 +146,7 @@ imagegen:
     - id: wan22-i2v-fastmove
       kind: VIDEO
       title: Wan 2.2 Fast Move
-      description: Video from a start image, lively motion; the sound is added from the picture by another model (noises, no speech). 1280x720 (16 fps); a long video is made scene by scene by SVI at 960x544, every scene checked against the start image, so the colours and the face hold.
+      description: Video from a start image, lively motion; a sound can be added from the picture by another model (noises; with people it may add unclear voice-like sounds). 1280x720 (16 fps), upscaled to 1920 and smoothed to 64 fps by default; a long video is made scene by scene by SVI at 960x544, every scene checked against the start image, so the colours and the face hold.
       # 720p 2+3 steps ~700 s at the old 48G RAM limit + ~25 s for the sound (MMAudio); a long video ~8 min a scene
       typical-seconds: 720
       prompt-style: WAN
@@ -156,12 +156,20 @@ imagegen:
         - { name: prompt, type: TEXT, required: true }
         - { name: negativePrompt, type: TEXT }
         # the old chain of Wan scenes blurred and shifted its colours from ~17 s on (2026-10-29); SVI held 20 s
-        # without a drift (2026-11-04, task 6), a longer video is not tested yet
-        - { name: seconds, type: INT, default: '5', min: 2, max: 20 }
+        # without a drift (2026-11-04) and 30 s with the body in view (2026-11-05, task 6; a close face keeps the
+        # person, its colours creep a little after 20 s)
+        - { name: seconds, type: INT, default: '5', min: 2, max: 30 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
         - { name: keepFace, type: BOOL, default: 'false' }
-        # the sound made from the frames by MMAudio (comfy/SoundGraphs); a long video gets one in its join
-        - { name: sound, type: BOOL, default: 'true' }
+        # the sound made from the frames by MMAudio (comfy/SoundGraphs); a long video gets one in its join. Off by
+        # default: with people in the picture MMAudio adds unintelligible speech-like sounds (its known limitation;
+        # task 6 bench of 2026-11-05: 33-90 % of the sound voice-like, and the user heard it)
+        - { name: sound, type: BOOL, default: 'false' }
+        # the finished video upscaled to 1920 by 4x-NMKD-Siax / smoothed to 64 fps by RIFE x4, the recipe of the author
+        # of the weights (comfy/UpscaleGraphs; a long video in its join): ~3.5 s a frame of 960x544 for the upscale,
+        # 30 s ~ +28 min; the smoothing ~+1-2 min (task 6, 2026-11-05: on by default, as the author makes them)
+        - { name: upscale, type: BOOL, default: 'true' }
+        - { name: smooth, type: BOOL, default: 'true' }
         - { name: seed, type: SEED }
     - id: ltx25-nsfw-i2v
       kind: VIDEO
@@ -180,4 +188,7 @@ imagegen:
         - { name: seconds, type: INT, default: '5', min: 2, max: 30 }
         - { name: orientation, type: ENUM, default: landscape, options: [ landscape, portrait ] }
         - { name: keepFace, type: BOOL, default: 'false' }
+        # as for Wan, on by default as well (the user, 2026-11-05); RIFE x2 = 48 fps
+        - { name: upscale, type: BOOL, default: 'true' }
+        - { name: smooth, type: BOOL, default: 'true' }
         - { name: seed, type: SEED }

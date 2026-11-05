@@ -173,9 +173,10 @@ class ComfyUiGatewayTest {
     }
 
     @Test
-    void wanGetsItsSoundFromTheDecodedFramesByDefault() {
+    void wanGetsItsSoundFromTheDecodedFrames() {
         var template = new WorkflowRepository(MAPPER).get("wan22-i2v-fastmove");
-        Job job = job("wan22-i2v-fastmove", params("prompt", "a cat jumps on the sofa", "seed", 42), null);
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a cat jumps on the sofa", "seed", 42, "sound", true),
+                null);
 
         ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(job, template));
 
@@ -215,6 +216,84 @@ class ComfyUiGatewayTest {
         // the times of the moments of a Wan prompt are no sound
         assertThat(SoundGraphs.prompt("(At 0 seconds: a cat sits.) (At 1 second: it jumps.)"))
                 .isEqualTo("a cat sits. it jumps.");
+    }
+
+    @Test
+    void anUpscaledSmoothedWanClipIsSavedByTheChunkedNodeWithItsSound() {
+        var template = new WorkflowRepository(MAPPER).get("wan22-i2v-fastmove");
+        Job job = job("wan22-i2v-fastmove", params("prompt", "walks", "seed", 4, "sound", true, "upscale", true,
+                "smooth", true), null);
+
+        ObjectNode graph = gateway.buildWorkflow(template, WorkflowValues.of(job, template));
+
+        // the output node keeps its id, so the result is found where it was
+        assertThat(graph.at("/17/class_type").asString()).isEqualTo(UpscaleGraphs.NODE);
+        assertThat(graph.at("/17/inputs/video").toString()).isEqualTo("[\"16\",0]");
+        assertThat(graph.at("/17/inputs/filename_prefix").asString()).isEqualTo(job.getId().toString());
+        assertThat(graph.at("/17/inputs/long_side").asInt()).isEqualTo(1920);
+        // the author of the weights: RIFE x4, 64 fps
+        assertThat(graph.at("/17/inputs/multiplier").asInt()).isEqualTo(4);
+        assertThat(graph.at("/17/inputs/chunk_frames").asInt()).isEqualTo(UpscaleGraphs.CHUNK_FRAMES);
+        assertThat(graph.at("/17/inputs/format").isMissingNode()).isTrue();
+        assertThat(graph.at("/17/inputs/upscale_model").toString()).isEqualTo("[\"500\",0]");
+        assertThat(graph.at("/500/inputs/model_name").asString()).isEqualTo(UpscaleGraphs.UPSCALE_MODEL);
+        assertThat(graph.at("/17/inputs/interp_model").toString()).isEqualTo("[\"501\",0]");
+        assertThat(graph.at("/501/class_type").asString()).isEqualTo("FrameInterpolationModelLoader");
+        assertThat(graph.at("/501/inputs/model_name").asString()).isEqualTo(UpscaleGraphs.INTERPOLATION_MODEL);
+        // the sound goes into the video the node gets
+        assertThat(graph.at("/16/inputs/audio").toString()).isEqualTo("[\"402\",0]");
+    }
+
+    @Test
+    void theUpscaleAndTheSmoothingGoAlone() {
+        var template = new WorkflowRepository(MAPPER).get("ltx25-nsfw-i2v");
+        Job smooth = job("ltx25-nsfw-i2v", params("prompt", "walks", "smooth", true, "upscale", false), null);
+        Job upscale = job("ltx25-nsfw-i2v", params("prompt", "walks", "upscale", true, "smooth", false), null);
+        Job plain = job("ltx25-nsfw-i2v", params("prompt", "walks", "upscale", false, "smooth", false), null);
+
+        ObjectNode smoothed = gateway.buildWorkflow(template, WorkflowValues.of(smooth, template));
+        ObjectNode upscaled = gateway.buildWorkflow(template, WorkflowValues.of(upscale, template));
+        ObjectNode same = gateway.buildWorkflow(template, WorkflowValues.of(plain, template));
+
+        assertThat(smoothed.at("/20/class_type").asString()).isEqualTo(UpscaleGraphs.NODE);
+        assertThat(smoothed.has(UpscaleGraphs.UPSCALER)).isFalse();
+        assertThat(smoothed.at("/20/inputs/upscale_model").isMissingNode()).isTrue();
+        // LTX has 24 fps: x2 = 48
+        assertThat(smoothed.at("/20/inputs/multiplier").asInt()).isEqualTo(2);
+        assertThat(upscaled.at("/20/inputs/multiplier").asInt()).isEqualTo(1);
+        assertThat(upscaled.has(UpscaleGraphs.INTERPOLATOR)).isFalse();
+        assertThat(upscaled.at("/20/inputs/upscale_model").toString()).isEqualTo("[\"500\",0]");
+        assertThat(same.at("/20/class_type").asString()).isEqualTo("SaveVideo");
+        // only the upscale changes the size the job reports
+        assertThat(WorkflowValues.resultSize(smooth, template)).containsExactly(1216, 704);
+        assertThat(WorkflowValues.resultSize(upscale, template)).containsExactly(1920, 1112);
+    }
+
+    @Test
+    void anUpscaledVideoReportsTheSizeOfTheNode() {
+        var wan = new WorkflowRepository(MAPPER).get("wan22-i2v-fastmove");
+        var svi = new WorkflowRepository(MAPPER).get("wan22-i2v-svi");
+        Job portrait = job("wan22-i2v-fastmove", params("prompt", "walks", "orientation", "portrait",
+                "upscale", true), null);
+
+        assertThat(WorkflowValues.resultSize(portrait, wan)).containsExactly(1080, 1920);
+        assertThat(WorkflowValues.resultSize(portrait, svi)).containsExactly(1088, 1920);
+        assertThatThrownBy(() -> UpscaleGraphs.apply(MAPPER.createObjectNode(), "1", WorkflowValues.video(wan), true,
+                false)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void theScenesOfAnUpscaledVideoAreSavedAsTheyAre() {
+        var template = new WorkflowRepository(MAPPER).get("wan22-i2v-svi");
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "upscale", true,
+                "smooth", true), null);
+        job.setScenes(List.of(new Scene(5, "he walks", null), new Scene(5, "he sits", null)));
+
+        ObjectNode scene = gateway.buildWorkflow(template, WorkflowValues.scene(job, template, 2));
+
+        // the join upscales and smooths the whole video
+        assertThat(scene.at("/25/class_type").asString()).isEqualTo("SaveVideo");
+        assertThat(scene.has(UpscaleGraphs.UPSCALER)).isFalse();
     }
 
     @Test
@@ -356,8 +435,9 @@ class ComfyUiGatewayTest {
 
     @Test
     void aVideoOutputIsTakenFromTheImagesKeyOfSaveVideo() throws IOException {
-        Job job = job("wan22-i2v-fastmove", params("prompt", "walks", "seconds", 2, "orientation", "portrait"),
-                null);
+        // the upscale and the smoothing (on by default) have their own tests
+        Job job = job("wan22-i2v-fastmove", params("prompt", "walks", "seconds", 2, "orientation", "portrait",
+                "upscale", false, "smooth", false), null);
         Files.write(files.input(job.getId()), png(8, 8));
         server.expect(requestTo(BASE + "/upload/image")).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE + "/prompt"))
@@ -592,8 +672,9 @@ class ComfyUiGatewayTest {
     }
 
     private Job longVideo() {
-        Job job = job("ltx25-nsfw-i2v", params("prompt", "a story", "seconds", 20, "seed", 5, "orientation", "portrait"),
-                null);
+        // the upscale and the smoothing (on by default) have their own tests
+        Job job = job("ltx25-nsfw-i2v", params("prompt", "a story", "seconds", 20, "seed", 5, "orientation", "portrait",
+                "upscale", false, "smooth", false), null);
         job.setScenes(List.of(new Scene(10, "he plays", null), new Scene(10, "he stands up", null)));
         return job;
     }
@@ -765,8 +846,8 @@ class ComfyUiGatewayTest {
 
     @Test
     void theWanScenesAreJoinedWithABlendOfTheFramesTheyShare() throws IOException {
-        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "seed", 3, "sound", false),
-                null);
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "seed", 3, "sound", false,
+                "upscale", false, "smooth", false), null);
         job.setScenes(List.of(new Scene(5, "he walks", null), new Scene(5, "he sits", null)));
         Files.write(files.scene(job.getId(), 1), new byte[]{1});
         Files.write(files.scene(job.getId(), 2), new byte[]{2});
@@ -809,7 +890,8 @@ class ComfyUiGatewayTest {
 
     @Test
     void aLongWanVideoGetsOneSoundInItsJoin() throws IOException {
-        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "seed", 3), null);
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "seed", 3, "sound", true,
+                "upscale", false, "smooth", false), null);
         job.setScenes(List.of(new Scene(5, "[Scene 1 · 5 s]\nhe walks", null), new Scene(5, "he sits", null)));
         Files.write(files.scene(job.getId(), 1), new byte[]{1});
         Files.write(files.scene(job.getId(), 2), new byte[]{2});
@@ -836,6 +918,40 @@ class ComfyUiGatewayTest {
 
         gateway.joinScenes(job, sink, later());
 
+        server.verify();
+    }
+
+    @Test
+    void anUpscaledLongWanVideoIsUpscaledAndSmoothedInItsJoinAfterTheSound() throws IOException {
+        Job job = job("wan22-i2v-fastmove", params("prompt", "a story", "seconds", 10, "seed", 3, "sound", true,
+                "upscale", true, "smooth", true), null);
+        job.setScenes(List.of(new Scene(5, "he walks", null), new Scene(5, "he sits", null)));
+        Files.write(files.scene(job.getId(), 1), new byte[]{1});
+        Files.write(files.scene(job.getId(), 2), new byte[]{2});
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/upload/image"))
+                .andRespond(withSuccess("{\"name\":\"x\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/prompt"))
+                .andExpect(jsonPath("$.prompt['301'].class_type").value(UpscaleGraphs.NODE))
+                .andExpect(jsonPath("$.prompt['301'].inputs.video[0]").value("311"))
+                .andExpect(jsonPath("$.prompt['301'].inputs.filename_prefix").value(job.getId().toString()))
+                .andExpect(jsonPath("$.prompt['301'].inputs.multiplier").value(4))
+                .andExpect(jsonPath("$.prompt['301'].inputs.upscale_model[0]").value("500"))
+                .andExpect(jsonPath("$.prompt['301'].inputs.interp_model[0]").value("501"))
+                .andRespond(withSuccess("{\"prompt_id\":\"p1\"}", MediaType.APPLICATION_JSON));
+        String done = HISTORY_DONE.formatted("301",
+                "{\"images\":[{\"filename\":\"j.mp4\",\"subfolder\":\"\",\"type\":\"output\"}],\"animated\":[true]}");
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE + "/history/p1")).andRespond(withSuccess(done, MediaType.APPLICATION_JSON));
+        server.expect(requestTo(containsString("/view?filename=j.mp4")))
+                .andRespond(withSuccess(new byte[]{5}, MediaType.APPLICATION_OCTET_STREAM));
+        server.expect(requestTo(BASE + "/history")).andRespond(withSuccess());
+
+        JobResult result = gateway.joinScenes(job, sink, later());
+
+        // the scenes are 960x544, the node makes the long side 1920
+        assertThat(List.of(result.width(), result.height())).containsExactly(1920, 1088);
         server.verify();
     }
 

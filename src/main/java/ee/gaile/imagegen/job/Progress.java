@@ -36,6 +36,8 @@ public record Progress(Phase phase, int value, int max, Integer scene, Integer s
         SAMPLING,
         /** After the last sampler step: VAE decode, video encode */
         DECODING,
+        /** The finished video is upscaled and / or smoothed (value / max: its frames done) */
+        UPSCALING,
         /** A long video between two scenes: the next scene waits for its turn in the queue */
         WAITING,
         /** A long video: the scenes are joined into one clip */

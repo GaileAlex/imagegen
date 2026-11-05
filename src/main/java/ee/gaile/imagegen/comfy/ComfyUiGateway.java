@@ -183,7 +183,24 @@ public class ComfyUiGateway implements ComfyGateway {
                     SoundGraphs.prompt((String) values.get(ParamNames.PROMPT)),
                     ((Number) values.get("seed")).longValue());
         }
+        addUpscale(graph, template.outputNode(), template, values);
         return graph;
+    }
+
+    /**
+     * The upscale and the smoothing of the finished video, when the job asks for them and its workflow gives them
+     * ({@link UpscaleGraphs})
+     */
+    private static void addUpscale(ObjectNode graph, String outputNode, WorkflowTemplate template,
+                                   Map<String, Object> values) {
+        if (template.video() == null) {
+            return;
+        }
+        boolean upscale = UpscaleGraphs.upscales(values, template.video());
+        boolean smooth = UpscaleGraphs.smooths(values, template.video());
+        if (upscale || smooth) {
+            UpscaleGraphs.apply(graph, outputNode, template.video(), upscale, smooth);
+        }
     }
 
     private JobResult runPrompt(Job job, Consumer<Progress> progress, Deadline deadline) throws IOException {
@@ -293,6 +310,7 @@ public class ComfyUiGateway implements ComfyGateway {
                         .collect(Collectors.joining(" "));
                 SoundGraphs.addToJoin(graph, SoundGraphs.prompt(story), job.getSeed());
             }
+            addUpscale(graph, SceneGraphs.JOIN_SAVE, template, job.getParams());
             Ran ran = execute(job, graph, SceneGraphs.JOIN_SAVE, progress, deadline);
             String contentType = "video/mp4";
             Path target = files.result(job.getId(), contentType);
@@ -501,7 +519,7 @@ public class ComfyUiGateway implements ComfyGateway {
 
     private static JobResult videoResult(Job job, WorkflowTemplate template, String contentType, Path file)
             throws IOException {
-        int[] size = WorkflowValues.videoSize(job, template);
+        int[] size = WorkflowValues.resultSize(job, template);
         return new JobResult(contentType, Files.size(file), size[0], size[1], (double) WorkflowValues.seconds(job));
     }
 

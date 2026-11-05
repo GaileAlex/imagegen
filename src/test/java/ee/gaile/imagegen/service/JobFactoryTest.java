@@ -104,7 +104,7 @@ class JobFactoryTest {
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("muse-txt2img", params("prompt", "x", "cfg", 0.5)))
                 .isInstanceOf(InvalidParamsException.class);
-        assertThatThrownBy(() -> create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 21)))
+        assertThatThrownBy(() -> create("wan22-i2v-fastmove", params("prompt", "x", "seconds", 31)))
                 .isInstanceOf(InvalidParamsException.class);
         assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", "seconds", 31)))
                 .isInstanceOf(InvalidParamsException.class);
@@ -134,10 +134,21 @@ class JobFactoryTest {
     }
 
     @Test
-    void wanGetsASoundUnlessTheClientTurnsItOffAndLtxHasItsOwn() {
-        assertThat(create("wan22-i2v-fastmove", params("prompt", "x")).getParams()).containsEntry("sound", true);
-        assertThat(create("wan22-i2v-fastmove", params("prompt", "x", "sound", false)).getParams())
-                .containsEntry("sound", false);
+    void videosAreUpscaledAndSmoothedUnlessTheClientTurnsItOff() {
+        assertThat(create("wan22-i2v-fastmove", params("prompt", "x")).getParams())
+                .containsEntry("upscale", true).containsEntry("smooth", true);
+        assertThat(create("ltx25-nsfw-i2v", params("prompt", "x")).getParams())
+                .containsEntry("upscale", true).containsEntry("smooth", true);
+        assertThat(create("ltx25-nsfw-i2v", params("prompt", "x", "upscale", false)).getParams())
+                .containsEntry("upscale", false);
+    }
+
+    @Test
+    void wanGetsASoundOnlyWhenTheClientAsksAndLtxHasItsOwn() {
+        // MMAudio adds unintelligible speech-like sounds to people (2026-11-05): off by default
+        assertThat(create("wan22-i2v-fastmove", params("prompt", "x")).getParams()).containsEntry("sound", false);
+        assertThat(create("wan22-i2v-fastmove", params("prompt", "x", "sound", true)).getParams())
+                .containsEntry("sound", true);
         assertThatThrownBy(() -> create("ltx25-nsfw-i2v", params("prompt", "x", "sound", true)))
                 .isInstanceOf(InvalidParamsException.class).hasMessageContaining("Unknown param");
     }
@@ -266,13 +277,12 @@ class JobFactoryTest {
 
     @Test
     void scenesWrittenForAnotherModelAreWrittenAgainByTheJob() {
-        // the 3 x 10 s of LTX given to Wan: 5 s a scene, 20 s in all
+        // the 3 x 10 s of LTX given to Wan: 5 s a scene, 30 s in all
         String ltx = "[Scene 1 · 10 s]\nhe plays\n[Scene 2 · 10 s]\nhe stands\n[Scene 3 · 10 s]\nhe waves";
         Job wan = create("wan22-i2v-fastmove", params("prompt", ltx, "seconds", 5));
 
-        assertThat(wan.getScenes()).containsExactly(new Scene(5, null, null), new Scene(5, null, null),
-                new Scene(5, null, null), new Scene(5, null, null));
-        assertThat(wan.getParams()).containsEntry("seconds", 20).containsEntry("prompt", ltx);
+        assertThat(wan.getScenes()).hasSize(6).allMatch(scene -> scene.equals(new Scene(5, null, null)));
+        assertThat(wan.getParams()).containsEntry("seconds", 30).containsEntry("prompt", ltx);
     }
 
     @Test
