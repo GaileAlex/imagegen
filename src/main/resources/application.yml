@@ -47,8 +47,9 @@ imagegen:
   # A job that runs but stays silent this long has hung: ComfyUI reports every step of a sampler. A slow job goes on:
   # LTX 12 s with keepFace once spilled out of the VRAM and took over 15 min at ~50 W (2026-10-28)
   stall-timeout: 10m
-  # A guard over all of one run, however lively
-  job-timeout: 60m
+  # A guard over all of one run, however lively. The last turn of a long video makes its last scene and the join with
+  # the upscale: LTX 30 s = 10 min + 721 frames at 5-6 s each (2026-11-05: 60m cut it at frame ~500)
+  job-timeout: 150m
   # Russian prompts go to the models in English. The CPU instance of Ollama of the CV project: the GPU belongs to
   # ComfyUI; the model leaves memory with the unload of the GPU model
   translator:

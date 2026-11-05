@@ -181,7 +181,8 @@ Errors (body `{"error": "<code>", "message": "..."}`):
   also `STORYBOARD`, `WAITING`, `JOINING`, and `progress.scene` / `progress.scenes` (see "Long videos")
 - A run of ComfyUI fails with `"timeout: ComfyUI reported nothing for N min"` when no event of it came for
   `imagegen.stall-timeout` (10 min; a sampler reports every step, a slow one too), and with `"timeout"` after
-  `imagegen.job-timeout` (60 min) however lively. Until 2026-10-29 a fixed 15 min failed a slow but alive LTX job.
+  `imagegen.job-timeout` (150 min) however lively. Until 2026-10-29 a fixed 15 min failed a slow but alive LTX job;
+  until 2026-11-05 60 min failed the upscale of a 30 s LTX video (its last scene and the join take ~85 min).
 - `result` when DONE: `{"contentType": "image/png", "size": 1834221, "width": 1024, "height": 1024}`
   (`durationSeconds` for video)
 - `translations`: param name -> the English text the model got instead of the typed one. Every text param with
