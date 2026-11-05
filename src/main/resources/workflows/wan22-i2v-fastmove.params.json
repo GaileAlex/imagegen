@@ -5,6 +5,8 @@
   "keepFace": "WAN_LAST_FRAME",
   "scenes": "wan22-i2v-svi",
   "video": {"fps": 16, "width": 1280, "height": 720, "tailFrames": 9,
+            "upscaleTo": 1920, "smoothBy": 4,
+            "upscaleNote": "upscale + smooth: the author of the weights - 4x-NMKD-Siax, then RIFE x4 (64 fps); task 6 2026-11-05, on by default",
             "note": "frames = fps * seconds + 1 (4n+1); tailFrames only matters for scenes made with this workflow, a long Wan video is made with \"scenes\""},
   "timing": "1280x720 81 frames 2+3 steps: ~700 s at the 48G RAM limit (2026-11-04, test-results/video-quality/p1w-author); 832x480 2+2 was 157 s",
   "params": {

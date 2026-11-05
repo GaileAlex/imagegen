@@ -121,6 +121,13 @@ class IdeaPrompts {
             "videoPrompt": %s
             """;
 
+    // Wan has no voice: "he starts to talk" gave lips moving through the teeth, and MMAudio, which makes the sound
+    // from those frames afterwards, turned them into unintelligible speech (the bench of 2026-11-05)
+    private static final String MUTE = """
+            Nobody talks or sings, unless the idea asks for it: the clip has no voice, its sound is made afterwards \
+            from the picture, and lips moving without words come out as mumbling. People smile, nod and gesture \
+            instead, and the prompt never mentions talking or silence.""";
+
     // the "dynamic prompts" of the author of the Wan weights (Civitai 2053259): one bracket per second; they followed
     // the prompt much better than plain sentences (2026-11-04, task 6)
     private static final String WAN = """
@@ -130,7 +137,7 @@ class IdeaPrompts {
             camera moves (static, slow push-in, pan, tracking); the next ones tell what the people and animals do, \
             their gestures and expressions, in the order it happens. The looks are already in the picture: name the \
             people briefly ("the woman in the red coat") so it is clear who is who, without describing the whole \
-            picture again.""";
+            picture again. """ + MUTE;
 
     // longer clips get longer prompts: 5 s 110-170 words, 12 s 180-240. The parts are the prompt template of the
     // IC-LoRA baked into the LTX weights (ChrisColeTech, the card); with them the face held better (2026-11-04)
@@ -224,7 +231,7 @@ class IdeaPrompts {
             brackets with the second of the scene it starts at: "(At 0 seconds: ...) (At 1 second: ...)", each one \
             short sentence. "At 0 seconds" is the first moment: the shot, where everyone is and what they do, how \
             the camera moves (static, slow push-in, pan, tracking); the next ones tell what they do and how they \
-            move, in order, their gestures and expressions.""";
+            move, in order, their gestures and expressions. """ + MUTE;
 
     private static final String LTX_SCENE = """
             120-220 words with sound, present tense, in labelled parts, each on its own line: "[VISUAL]: " one \

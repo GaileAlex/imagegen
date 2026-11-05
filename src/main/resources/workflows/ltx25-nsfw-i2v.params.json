@@ -4,6 +4,8 @@
   "decoded": "17",
   "keepFace": "LTX_GUIDES",
   "video": {"fps": 24, "width": 1216, "height": 704, "tailFrames": 17,
+            "upscaleTo": 1920, "smoothBy": 2,
+            "upscaleNote": "upscale + smooth: as for Wan (its author upscales by RTX Video Super Resolution x1.25, not installable here); RIFE x2 = 48 fps",
             "note": "frames = fps * seconds + 1 (8n+1); the tail (8n+1) starts the next scene"},
   "timing": "1216x704 121 frames: ~270 s with the load (2026-11-04, CFG 3 = two passes a step; the old graph at CFG 1 ~140 s)",
   "params": {

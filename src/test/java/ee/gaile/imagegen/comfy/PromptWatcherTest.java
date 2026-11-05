@@ -46,6 +46,18 @@ class PromptWatcherTest {
     }
 
     @Test
+    void theStepsOfTheOutputNodeAreTheUpscale() {
+        watcher.bind("p1");
+        watcher.accept(event("progress", "{\"value\":16,\"max\":16,\"prompt_id\":\"p1\",\"node\":\"10\"}"));
+        watcher.accept(event("executing", "{\"node\":\"9\",\"prompt_id\":\"p1\"}"));
+
+        watcher.accept(event("progress", "{\"value\":32,\"max\":81,\"prompt_id\":\"p1\",\"node\":\"9\"}"));
+
+        assertThat(progress).containsExactly(new Progress(Progress.Phase.SAMPLING, 16, 16),
+                new Progress(Progress.Phase.DECODING, 0, 0), new Progress(Progress.Phase.UPSCALING, 32, 81));
+    }
+
+    @Test
     void theOutputNodeBeforeAnySamplingIsNotDecoding() {
         watcher.bind("p1");
 

@@ -10,6 +10,8 @@ package ee.gaile.imagegen.model.workflow;
  *                   on and not only the pose (a latent chain: the frames the two scenes share and the join blends);
  *                   one more than a whole number of latent frames (8n+1 for LTX, 4n+1 for Wan), so a scene with them
  *                   still has the frame count the model takes
+ * @param upscaleTo  the long side of the video with the "upscale" param (the proportions stay); 0 = not given
+ * @param smoothBy   the frames per frame of the video with the "smooth" param (frame interpolation); 1 = not given
  */
-public record VideoProfile(int fps, int width, int height, int tailFrames) {
+public record VideoProfile(int fps, int width, int height, int tailFrames, int upscaleTo, int smoothBy) {
 }

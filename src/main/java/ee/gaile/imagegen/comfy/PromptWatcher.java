@@ -42,6 +42,8 @@ class PromptWatcher implements Consumer<ComfyEvent> {
     private final List<ComfyEvent> early = new ArrayList<>();
     private String promptId;
     private boolean sampled;
+    /** The output node runs: its steps are the upscale of the video (UpscaleGraphs), not sampling */
+    private boolean atOutput;
     private Outcome outcome;
     private Instant lastEvent;
 
@@ -104,17 +106,21 @@ class PromptWatcher implements Consumer<ComfyEvent> {
         JsonNode data = event.data();
         switch (event.type()) {
             case "progress" -> {
+                boolean upscale = atOutput || outputNode.equals(data.path("node").asString(""));
                 sampled = true;
-                progress.accept(new Progress(Progress.Phase.SAMPLING, data.path("value").asInt(),
-                        data.path("max").asInt()));
+                progress.accept(new Progress(upscale ? Progress.Phase.UPSCALING : Progress.Phase.SAMPLING,
+                        data.path("value").asInt(), data.path("max").asInt()));
             }
             case "executing" -> {
                 JsonNode node = data.get("node");
                 if (node == null || node.isNull()) {
                     // The older way to say "the prompt is done"
                     outcome = new Outcome(Status.SUCCESS, null);
-                } else if (sampled && node.asString().equals(outputNode)) {
-                    progress.accept(new Progress(Progress.Phase.DECODING, 0, 0));
+                } else if (node.asString().equals(outputNode)) {
+                    atOutput = true;
+                    if (sampled) {
+                        progress.accept(new Progress(Progress.Phase.DECODING, 0, 0));
+                    }
                 }
             }
             case "execution_success" -> outcome = new Outcome(Status.SUCCESS, null);

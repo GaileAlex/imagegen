@@ -43,7 +43,8 @@ class WorkflowValues {
     /**
      * The values of one scene of a long video: its prompt, its length, its own seed; the first scene starts from the
      * start image of the job (or the text alone), the next ones from the tail of the scene before. The face anchor is
-     * off: it would pull every scene back to the start image. No sound either: the join makes one for all the scenes.
+     * off: it would pull every scene back to the start image. No sound, upscale or smoothing either: the join does
+     * them for all the scenes.
      * A scene of a latent chain (SVI) keeps the start image in every scene, as its anchor: the scene before reaches it
      * as a latent, not as frames.
      *
@@ -58,6 +59,9 @@ class WorkflowValues {
         values.put("seed", job.getSeed() + scene - 1);
         values.put(ParamNames.KEEP_FACE, false);
         values.put(ParamNames.SOUND, false);
+        // the join upscales and smooths the whole video
+        values.put(ParamNames.UPSCALE, false);
+        values.put(ParamNames.SMOOTH, false);
         values.put("filenamePrefix", job.getId() + "-scene" + scene);
         int frames = video.fps() * current.seconds();
         if (scene == 1) {
@@ -79,6 +83,18 @@ class WorkflowValues {
         VideoProfile video = video(template);
         boolean portrait = "portrait".equals(job.getParams().get(ParamNames.ORIENTATION));
         return portrait ? new int[]{video.height(), video.width()} : new int[]{video.width(), video.height()};
+    }
+
+    /**
+     * @return width and height of the video the job gets: that of its workflow, upscaled when the job asks for it
+     */
+    static int[] resultSize(Job job, WorkflowTemplate template) {
+        int[] size = videoSize(job, template);
+        VideoProfile video = video(template);
+        if (UpscaleGraphs.upscales(job.getParams(), video)) {
+            return UpscaleGraphs.size(size[0], size[1], video);
+        }
+        return size;
     }
 
     static int seconds(Job job) {

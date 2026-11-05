@@ -78,6 +78,11 @@ RUN tar -xzf /tmp/kjnodes.tar.gz -C /tmp && mv /tmp/ComfyUI-KJNodes-$KJNODES_COM
 COPY patch_gguf.py /tmp/patch_gguf.py
 RUN python /tmp/patch_gguf.py /app/custom_nodes/ComfyUI-GGUF && rm /tmp/patch_gguf.py
 
+# The upscale (4x-NMKD-Siax) and the frame interpolation (RIFE, native in ComfyUI) of a finished video a chunk of
+# frames at a time, written straight into the mp4: the native nodes keep the whole video at 4x in RAM (task 6);
+# late in the file, so a change of it leaves the layers of the downloads above as they are
+COPY video_upscale /app/custom_nodes/video_upscale
+
 # The models are a volume (copied once from StabilityMatrix, never a folder of Windows: 9p reads are slow);
 # outputs and inputs are temporary, the Spring app fetches the results over the API
 # (ubuntu:24.04 has its own user "ubuntu" with uid 1000)

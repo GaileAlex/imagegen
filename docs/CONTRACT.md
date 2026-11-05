@@ -95,7 +95,8 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
   The person comes back to the pose of the picture there and the motion gets calmer, so it is a bad fit for a scene
   where someone leaves the frame. Ignored for a video from the text alone. LTX 12 s with it once spilled out of the
   16 GB of VRAM (6-10 min at ~50 W instead of ~1.5 min): one of the reasons it is off by default.
-- VIDEO `sound` (BOOL, Wan only, default true; LTX makes its own sound): MMAudio large 44k v2 (custom nodes
+- VIDEO `sound` (BOOL, Wan only, default false - with people in the picture MMAudio adds unintelligible speech-like
+  sounds, its known limitation; LTX makes its own sound): MMAudio large 44k v2 (custom nodes
   ComfyUI-MMAudio, patched by `comfyui-service/patch_mmaudio.py`) makes the sound from the frames and the prompt
   (scene marks removed, cut to ~300 characters for its CLIP text encoder; negative "music, speech, talking, singing,
   moaning"): noises and ambience, no speech. A clip gets it in its own graph (+~25 s), a long video once in its join
@@ -104,6 +105,18 @@ catalogue are accepted from the client; the rest of `<id>.params.json` (`filenam
   the sampler crawled at 3-15 s a step and the whole PC stuttered, 2026-11-02), the video model is unloaded before it
   (MMAudio moves its ~6.5 GB to the GPU outside ComfyUI's memory management). The NSFW fine-tune of MMAudio was
   tried and dropped: it put women's moans into every clip.
+- VIDEO `upscale` and `smooth` (BOOL, Wan and LTX, default true): the finished video upscaled to 1920 on its long
+  side (the proportions stay: Wan 1920x1080 / 1080x1920, a long Wan video 1920x1088, LTX 1920x1112) by
+  4x-NMKD-Siax scaled down with lanczos, and / or smoothed by RIFE v4.26 to `smoothBy` times its frames (Wan x4 =
+  64 fps, LTX x2 = 48 fps): the recipe of the author of the Wan weights. `upscaleTo` / `smoothBy` of `"video"` in
+  `<id>.params.json`. The output node (SaveVideo) becomes `UpscaleInterpolateSaveVideo` (custom node
+  `comfyui-service/video_upscale`): the native ComfyUI nodes (ImageUpscaleWithModel, FrameInterpolate) a chunk of 16
+  frames at a time, each chunk encoded as it is done (the native nodes keep the whole video at 4x in RAM: ~60 GB for
+  10 s at 960x544). A clip gets it in its own graph, a long video in its join, after the sound; the scenes are made
+  without. The size of the result in the job is the upscaled one. Models: `/models/upscale_models/4x_NMKD-Siax_200k.pth`
+  (sha256 560424d9...fd127e), `/models/frame_interpolation/rife_v4.26.safetensors` (Comfy-Org/Frame-Interpolation).
+  Time (RTX 5060 Ti): the upscale ~3.5 s a frame of 960x544, ~6 s of 1280x720 (Wan 5 s 720p +~8 min, 30 s by SVI
+  +~28 min); the smoothing ~0.1 s a new frame at 1920x1088.
 
 ## Jobs
 
@@ -256,13 +269,14 @@ clip made of scenes: the video model makes one scene at a time.
   step (the storyboard or a scene) is tried once more; a second failure fails the job. The join runs right after the
   last scene (`JOINING`, ~20 s; LTX: ComfyUI core `LoadVideo`, `Video Slice`, `ConcatenateVideo`, sound included; Wan:
   `LoadVideo`, `GetVideoComponents`, `ImageBatchExtendWithOverlap`, `CreateVideo`, and with `sound` its sound here:
-  MMAudio over the joined frames, +~25 s for 20 s).
+  MMAudio over the joined frames, +~25 s for 20 s; then `upscale` / `smooth`, see above).
 - `progress.scene` / `progress.scenes`: the scene the phase belongs to and how many (absent for a single clip).
 - The job JSON has `"scenes": [{"seconds": 10, "prompt": "...", "english": "..."}]` (`prompt` absent until the
   storyboard is written, `english` only for a translated scene); absent for a single clip.
 - Time: LTX 30 s ~13 min with the old graph at CFG 1 (scenes of 10 s ~4-4.5 min each; CFG 3 ~2x), Wan 20 s by SVI
-  ~32 min (~8 min a scene). Wan is limited to 20 s: the old chain of frames blurred and shifted its colours from ~17 s
-  on (black socks turned green); SVI held 20 s, longer is not tested yet.
+  ~32 min (~8 min a scene), 30 s ~50 min. Wan is limited to 30 s: the old chain of frames blurred and shifted its
+  colours from ~17 s on (black socks turned green); SVI held 20 s without a drift and 30 s with the body in view
+  (2026-11-05; a close face keeps the person, its colours creep a little after 20 s).
 - While it runs the scenes and the tail are kept as `<jobId>.scene<N>.mp4` and `<jobId>.tail.png` (Wan:
   `<jobId>.tail.latent`); they are deleted
   after the join, a failure, a cancel, and at the start of the service (a long video does not go on after a restart:
